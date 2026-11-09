@@ -424,7 +424,7 @@ public class CaptureService extends Service {
                         busy = false;
                         return;
                     }
-                    translateAll(list, s);
+                    translateSmart(list, s);
                 })
                 .addOnFailureListener(e -> {
                     bmp.recycle();
@@ -586,5 +586,33 @@ public class CaptureService extends Service {
         if (ht != null) ht.quit();
         if (recognizer != null) recognizer.close();
         if (translator != null) translator.close();
+    }
+        private long aiPause = 0;
+    private long lastWarn = 0;
+
+    private void translateSmart(final List<Blk> list, final String sig) {
+        final String key = prefs.getString("apikey", "").trim();
+        if (!prefs.getBoolean("ai", true) || key.isEmpty()
+                || System.currentTimeMillis() < aiPause) {
+            translateAll(list, sig);
+            return;
+        }
+        String model = prefs.getString("model", "gemini-2.5-flash-lite").trim();
+        if (model.isEmpty()) model = "gemini-2.5-flash-lite";
+        String[] texts = new String[list.size()];
+        for (int i = 0; i < texts.length; i++) texts[i] = list.get(i).text;
+        GeminiTranslator.translate(key, model, texts, (out, err, limited) -> {
+            if (out != null) {
+                finish(list, out, sig);
+                return;
+            }
+            long now = System.currentTimeMillis();
+            if (limited) aiPause = now + 60000;
+            if (now - lastWarn > 30000) {
+                lastWarn = now;
+                toast("Yapay zeka cevirisi calismadi (" + err + "), offline ceviriye gecildi");
+            }
+            translateAll(list, sig);
+        });
     }
 }
