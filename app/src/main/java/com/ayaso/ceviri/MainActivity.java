@@ -8,7 +8,11 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextWatcher;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -81,9 +85,49 @@ public class MainActivity extends Activity {
                 prefs.edit().putBoolean("smart", c).apply());
         root.addView(smart);
 
+        TextView aiHead = new TextView(this);
+        aiHead.setTextSize(18);
+        aiHead.setPadding(0, 48, 0, 8);
+        aiHead.setText("Yapay zeka çevirisi (Gemini)");
+        root.addView(aiHead);
+
+        TextView aiInfo = new TextView(this);
+        aiInfo.setTextSize(14);
+        aiInfo.setText("aistudio.google.com/apikey adresinden ücretsiz anahtar al ve aşağıya yapıştır. "
+                + "Anahtar yoksa ya da hata olursa çevrimdışı çeviri kullanılır.");
+        root.addView(aiInfo);
+
+        Switch ai = new Switch(this);
+        ai.setText("Yapay zeka çevirisini kullan");
+        ai.setChecked(prefs.getBoolean("ai", true));
+        ai.setPadding(0, 24, 0, 0);
+        ai.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("ai", c).apply());
+        root.addView(ai);
+
+        addField(root, "API anahtarı", "apikey", "", true);
+        addField(root, "Model adı", "model", "gemini-2.5-flash-lite", false);
+
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
         setContentView(sv);
+    }
+
+    private void addField(LinearLayout root, String hint, String key, String def, boolean secret) {
+        EditText et = new EditText(this);
+        et.setHint(hint);
+        et.setSingleLine(true);
+        et.setText(prefs.getString(key, def));
+        if (secret) {
+            et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        }
+        et.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int c, int d) {}
+            @Override public void onTextChanged(CharSequence s, int a, int c, int d) {}
+            @Override public void afterTextChanged(Editable e) {
+                prefs.edit().putString(key, e.toString().trim()).apply();
+            }
+        });
+        root.addView(et);
     }
 
     private void addSeek(LinearLayout root, String title, String key,
