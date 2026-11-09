@@ -37,6 +37,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
+
 import com.google.mlkit.common.model.DownloadConditions;
 import com.google.mlkit.nl.translate.TranslateLanguage;
 import com.google.mlkit.nl.translate.Translation;
@@ -68,7 +69,9 @@ public class CaptureService extends Service {
         int bgColor;
         StaticLayout layout;
         float tx, ty;
-    }static class OverlayView extends View {
+    }
+
+    static class OverlayView extends View {
         private List<Item> items = new ArrayList<>();
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -109,7 +112,9 @@ public class CaptureService extends Service {
     private boolean busy = false;
     private String lastSig = "";
     private int sw, sh;
-    private float density;private final Runnable loop = new Runnable() {
+    private float density;
+
+    private final Runnable loop = new Runnable() {
         @Override public void run() {
             if (!auto) return;
             capture();
@@ -154,7 +159,8 @@ public class CaptureService extends Service {
                 @Override public void onStop() { stopSelf(); }
             }, main);
             setupDisplay();
-        } catch (Exception e) {toast("Ekran yakalama baslatilamadi: " + e.getMessage());
+        } catch (Exception e) {
+            toast("Ekran yakalama baslatilamadi: " + e.getMessage());
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -200,7 +206,8 @@ public class CaptureService extends Service {
     private void updateOverlaySize() {
         if (overlay == null) return;
         overlayLp.width = sw;
-        overlayLp.height = sh;try { wm.updateViewLayout(overlay, overlayLp); } catch (Exception ignored) {}
+        overlayLp.height = sh;
+        try { wm.updateViewLayout(overlay, overlayLp); } catch (Exception ignored) {}
     }
 
     private GradientDrawable circle(int color) {
@@ -242,7 +249,9 @@ public class CaptureService extends Service {
             overlayLp.layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
-        wm.addView(overlay, overlayLp);// Baloncuk (ceviri katmanindan sonra eklenir, hep ustte kalir)
+        wm.addView(overlay, overlayLp);
+
+        // Baloncuk (ceviri katmanindan sonra eklenir, hep ustte kalir)
         bubble = new View(this);
         bubble.setBackground(circle(0xFF2979FF));
         int size = (int) (prefs.getInt("size", 52) * density);
@@ -289,7 +298,8 @@ public class CaptureService extends Service {
                         }
                         return true;
                 }
-                return false;}
+                return false;
+            }
         });
         wm.addView(bubble, bubbleLp);
 
@@ -325,7 +335,9 @@ public class CaptureService extends Service {
             main.removeCallbacks(loop);
             clearOverlay();
         }
-    }private Bitmap grab() {
+    }
+
+    private Bitmap grab() {
         synchronized (lock) {
             if (held == null) return null;
             Image.Plane p = held.getPlanes()[0];
@@ -370,7 +382,8 @@ public class CaptureService extends Service {
                     return;
                 }
                 ocr(bmp);
-            });}), wasShown ? 120 : 0);
+            });
+        }), wasShown ? 120 : 0);
     }
 
     private boolean hasLetters(String s) {
@@ -415,7 +428,11 @@ public class CaptureService extends Service {
                 })
                 .addOnFailureListener(e -> {
                     bmp.recycle();
-                    busy = false;private void sampleColors(Bitmap bmp, Blk k, boolean smart) {
+                    busy = false;
+                });
+    }
+
+    private void sampleColors(Bitmap bmp, Blk k, boolean smart) {
         k.bg = 0xE6000000;
         k.fg = Color.WHITE;
         if (!smart) return;
@@ -458,7 +475,8 @@ public class CaptureService extends Service {
             int fr = txt[1] / txt[0], fgc = txt[2] / txt[0], fb = txt[3] / txt[0];
             int lumFg = (299 * fr + 587 * fgc + 114 * fb) / 1000;
             if (Math.abs(lumFg - lumBg) >= 90) fgColor = Color.rgb(fr, fgc, fb);
-        }k.bg = Color.rgb(br, bgc, bb);
+        }
+        k.bg = Color.rgb(br, bgc, bb);
         k.fg = fgColor;
     }
 
@@ -499,7 +517,9 @@ public class CaptureService extends Service {
         Rect r = k.rect;
         int w = Math.max(r.width(), 140);
         int left = r.centerX() - w / 2;
-        if (r.width() >= 140) left = r.left;float avgLine = r.height() / (float) k.lines;
+        if (r.width() >= 140) left = r.left;
+
+        float avgLine = r.height() / (float) k.lines;
         float size = Math.max(18f, avgLine * 0.8f);
         float minSize = Math.max(14f, size * 0.5f);
         int availH = (int) (r.height() * 1.25f);
@@ -534,8 +554,9 @@ public class CaptureService extends Service {
 
     private void toast(String s) {
         Toast.makeText(getApplicationContext(), s, Toast.LENGTH_LONG).show();
-                }
-                                      @Override
+    }
+
+    @Override
     public void onConfigurationChanged(Configuration c) {
         super.onConfigurationChanged(c);
         if (projection != null && vd != null) {
@@ -566,4 +587,4 @@ public class CaptureService extends Service {
         if (recognizer != null) recognizer.close();
         if (translator != null) translator.close();
     }
-}TextPaint tp = new Te
+}
