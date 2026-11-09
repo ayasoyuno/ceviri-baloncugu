@@ -4,12 +4,18 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -22,31 +28,73 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.text.Layout;
+import android.text.StaticLayout;
+import android.text.TextPaint;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.TextView;
 import android.widget.Toast;
-
 import com.google.mlkit.common.model.DownloadConditions;
 import com.google.mlkit.nl.translate.TranslateLanguage;
 import com.google.mlkit.nl.translate.Translation;
 import com.google.mlkit.nl.translate.Translator;
 import com.google.mlkit.nl.translate.TranslatorOptions;
 import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+
 public class CaptureService extends Service {
     private static final String CH = "ceviri";
 
+    static class Blk {
+        Rect rect;
+        String text;
+        int lines;
+        int bg = 0xE6000000;
+        int fg = Color.WHITE;
+    }
+
+    static class Item {
+        RectF bg;
+        int bgColor;
+        StaticLayout layout;
+        float tx, ty;
+    }static class OverlayView extends View {
+        private List<Item> items = new ArrayList<>();
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        OverlayView(Context c) { super(c); }
+
+        void setItems(List<Item> l) { items = l; invalidate(); }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            for (Item it : items) {
+                paint.setColor(it.bgColor);
+                c.drawRoundRect(it.bg, 8f, 8f, paint);
+                c.save();
+                c.translate(it.tx, it.ty);
+                it.layout.draw(c);
+                c.restore();
+            }
+        }
+    }
+
     private WindowManager wm;
+    private SharedPreferences prefs;
+    private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
+    private OverlayView overlay;
     private View bubble;
-    private TextView panel;
-    private WindowManager.LayoutParams bubbleLp, panelLp;
+    private WindowManager.LayoutParams overlayLp, bubbleLp;
     private MediaProjection projection;
     private VirtualDisplay vd;
     private ImageReader reader;
@@ -59,13 +107,13 @@ public class CaptureService extends Service {
     private boolean modelReady = false;
     private boolean auto = false;
     private boolean busy = false;
-    private String lastText = "";
-
-    private final Runnable loop = new Runnable() {
+    private String lastSig = "";
+    private int sw, sh;
+    private float density;private final Runnable loop = new Runnable() {
         @Override public void run() {
             if (!auto) return;
             capture();
-            main.postDelayed(this, 1500);
+            main.postDelayed(this, prefs.getInt("speed", 10) * 100L);
         }
     };
 
@@ -93,6 +141,8 @@ public class CaptureService extends Service {
         ht.start();
         bg = new Handler(ht.getLooper());
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        density = getResources().getDisplayMetrics().density;
+        prefs = getSharedPreferences("ceviri", MODE_PRIVATE);
 
         try {
             int code = intent.getIntExtra("code", 0);
@@ -104,8 +154,7 @@ public class CaptureService extends Service {
                 @Override public void onStop() { stopSelf(); }
             }, main);
             setupDisplay();
-        } catch (Exception e) {
-            toast("Ekran yakalama baslatilamadi: " + e.getMessage());
+        } catch (Exception e) {toast("Ekran yakalama baslatilamadi: " + e.getMessage());
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -118,7 +167,9 @@ public class CaptureService extends Service {
     private void setupDisplay() {
         DisplayMetrics dm = new DisplayMetrics();
         wm.getDefaultDisplay().getRealMetrics(dm);
-        int sw = dm.widthPixels, sh = dm.heightPixels, dpi = dm.densityDpi;
+        sw = dm.widthPixels;
+        sh = dm.heightPixels;
+        int dpi = dm.densityDpi;
 
         synchronized (lock) {
             if (held != null) { held.close(); held = null; }
@@ -146,6 +197,12 @@ public class CaptureService extends Service {
         if (old != null) old.close();
     }
 
+    private void updateOverlaySize() {
+        if (overlay == null) return;
+        overlayLp.width = sw;
+        overlayLp.height = sh;try { wm.updateViewLayout(overlay, overlayLp); } catch (Exception ignored) {}
+    }
+
     private GradientDrawable circle(int color) {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
@@ -154,31 +211,42 @@ public class CaptureService extends Service {
         return g;
     }
 
+    private void applyBubblePrefs() {
+        if (bubble == null) return;
+        int size = (int) (prefs.getInt("size", 52) * density);
+        bubbleLp.width = size;
+        bubbleLp.height = size;
+        bubble.setAlpha(prefs.getInt("alpha", 80) / 100f);
+        try { wm.updateViewLayout(bubble, bubbleLp); } catch (Exception ignored) {}
+    }
+
     private void setupViews() {
-        float d = getResources().getDisplayMetrics().density;
-        int size = (int) (52 * d);
         int type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 
-        panel = new TextView(this);
-        panel.setTextColor(Color.WHITE);
-        panel.setBackgroundColor(0xDD000000);
-        panel.setTextSize(18);
-        panel.setGravity(Gravity.CENTER);
-        panel.setMaxLines(4);
-        panel.setPadding(32, 24, 32, 24);
-        panel.setVisibility(View.GONE);
-        panel.setOnClickListener(v -> panel.setVisibility(View.GONE));
-        panelLp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                type, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+        // Ceviri katmani: tum ekrani kaplar, dokunmayi oyuna gecirir
+        overlay = new OverlayView(this);
+        overlay.setVisibility(View.INVISIBLE);
+        overlayLp = new WindowManager.LayoutParams(sw, sh, type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
-        panelLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        wm.addView(panel, panelLp);
-
+        overlayLp.gravity = Gravity.TOP | Gravity.START;
+        overlayLp.x = 0;
+        overlayLp.y = 0;
+        if (Build.VERSION.SDK_INT >= 30) {
+            overlayLp.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        } else if (Build.VERSION.SDK_INT >= 28) {
+            overlayLp.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+        wm.addView(overlay, overlayLp);// Baloncuk (ceviri katmanindan sonra eklenir, hep ustte kalir)
         bubble = new View(this);
         bubble.setBackground(circle(0xFF2979FF));
-        bubble.setAlpha(0.8f);
+        int size = (int) (prefs.getInt("size", 52) * density);
+        bubble.setAlpha(prefs.getInt("alpha", 80) / 100f);
         bubbleLp = new WindowManager.LayoutParams(size, size, type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
@@ -211,15 +279,22 @@ public class CaptureService extends Service {
                         return true;
                     case MotionEvent.ACTION_UP:
                         if (!moved) {
-                            if (System.currentTimeMillis() - t0 > 600) toggleAuto();
-                            else capture();
+                            if (System.currentTimeMillis() - t0 > 600) {
+                                toggleAuto();
+                            } else if (!auto && overlay.getVisibility() == View.VISIBLE) {
+                                clearOverlay();
+                            } else {
+                                capture();
+                            }
                         }
                         return true;
                 }
-                return false;
-            }
+                return false;}
         });
         wm.addView(bubble, bubbleLp);
+
+        prefListener = (sp, key) -> applyBubblePrefs();
+        prefs.registerOnSharedPreferenceChangeListener(prefListener);
     }
 
     private void setupMl() {
@@ -234,19 +309,23 @@ public class CaptureService extends Service {
                 .addOnFailureListener(e -> toast("Model indirilemedi, interneti kontrol et"));
     }
 
+    private void clearOverlay() {
+        overlay.setItems(new ArrayList<Item>());
+        overlay.setVisibility(View.INVISIBLE);
+        lastSig = "";
+    }
+
     private void toggleAuto() {
         auto = !auto;
         bubble.setBackground(circle(auto ? 0xFF00C853 : 0xFF2979FF));
         if (auto) {
-            lastText = "";
+            lastSig = "";
             main.post(loop);
         } else {
             main.removeCallbacks(loop);
-            panel.setVisibility(View.GONE);
+            clearOverlay();
         }
-    }
-
-    private Bitmap grab() {
+    }private Bitmap grab() {
         synchronized (lock) {
             if (held == null) return null;
             Image.Plane p = held.getPlanes()[0];
@@ -267,58 +346,203 @@ public class CaptureService extends Service {
             toast("Ceviri modeli henuz inmedi, biraz bekle");
             return;
         }
+        DisplayMetrics dm = new DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(dm);
+        if (reader == null || dm.widthPixels != reader.getWidth()
+                || dm.heightPixels != reader.getHeight()) {
+            setupDisplay();
+            updateOverlaySize();
+            main.postDelayed(this::capture, 400);
+            return;
+        }
+
         busy = true;
-        final boolean a = auto;
-        if (!a) panel.setVisibility(View.INVISIBLE);
-        bg.postDelayed(() -> {
-            Bitmap bmp = grab();
-            if (bmp == null) {
-                main.post(() -> { busy = false; toast("Ekran goruntusu alinamadi, tekrar dene"); });
-                return;
-            }
-            Bitmap use = bmp;
-            if (a) {
-                int top = bmp.getHeight() / 2;
-                use = Bitmap.createBitmap(bmp, 0, top, bmp.getWidth(), bmp.getHeight() - top);
-            }
-            final Bitmap f = use;
-            main.post(() -> ocr(f, a));
-        }, a ? 0 : 250);
+        final boolean wasShown = overlay.getVisibility() == View.VISIBLE;
+        // Kendi cevirimizi okumamak icin yakalama aninda katmani gizliyoruz
+        if (wasShown) overlay.setVisibility(View.INVISIBLE);
+        main.postDelayed(() -> bg.post(() -> {
+            final Bitmap bmp = grab();
+            main.post(() -> {
+                if (wasShown) overlay.setVisibility(View.VISIBLE);
+                if (bmp == null) {
+                    busy = false;
+                    toast("Ekran goruntusu alinamadi, tekrar dene");
+                    return;
+                }
+                ocr(bmp);
+            });}), wasShown ? 120 : 0);
     }
 
-    private void ocr(Bitmap bmp, boolean a) {
+    private boolean hasLetters(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (Character.isLetter(s.charAt(i))) return true;
+        }
+        return false;
+    }
+
+    private void ocr(final Bitmap bmp) {
         recognizer.process(InputImage.fromBitmap(bmp, 0))
                 .addOnSuccessListener(res -> {
-                    String t = res.getText().replace("\n", " ").trim();
-                    if (t.isEmpty()) {
-                        if (a) panel.setVisibility(View.GONE);
-                        else showPanel("Yazi bulunamadi");
+                    boolean smart = prefs.getBoolean("smart", true);
+                    List<Blk> list = new ArrayList<>();
+                    StringBuilder sig = new StringBuilder();
+                    for (Text.TextBlock b : res.getTextBlocks()) {
+                        Rect r = b.getBoundingBox();
+                        String t = b.getText().replace("\n", " ").trim();
+                        if (r == null || t.length() < 2 || !hasLetters(t)) continue;
+                        Blk k = new Blk();
+                        k.rect = new Rect(r);
+                        k.text = t;
+                        k.lines = Math.max(1, b.getLines().size());
+                        sampleColors(bmp, k, smart);
+                        list.add(k);
+                        sig.append(t).append('|');
+                    }
+                    bmp.recycle();
+
+                    if (list.isEmpty()) {
+                        clearOverlay();
+                        if (!auto) toast("Yazi bulunamadi");
                         busy = false;
                         return;
                     }
-                    if (a && t.equals(lastText)) { busy = false; return; }
-                    lastText = t;
-                    translator.translate(t)
-                            .addOnSuccessListener(tr -> { showPanel(tr); busy = false; })
-                            .addOnFailureListener(e -> { showPanel("Ceviri hatasi"); busy = false; });
+                    String s = sig.toString();
+                    if (auto && s.equals(lastSig)) {
+                        busy = false;
+                        return;
+                    }
+                    translateAll(list, s);
                 })
-                .addOnFailureListener(e -> busy = false);
+                .addOnFailureListener(e -> {
+                    bmp.recycle();
+                    busy = false;private void sampleColors(Bitmap bmp, Blk k, boolean smart) {
+        k.bg = 0xE6000000;
+        k.fg = Color.WHITE;
+        if (!smart) return;
+
+        Rect r = k.rect;
+        int l = Math.max(0, r.left), t = Math.max(0, r.top);
+        int rr = Math.min(bmp.getWidth(), r.right), b = Math.min(bmp.getHeight(), r.bottom);
+        if (rr - l < 2 || b - t < 2) return;
+
+        int step = Math.max(1, (int) Math.sqrt((double) (rr - l) * (b - t) / 1500.0));
+        HashMap<Integer, int[]> m = new HashMap<>();
+        for (int y = t; y < b; y += step) {
+            for (int x = l; x < rr; x += step) {
+                int c = bmp.getPixel(x, y);
+                int cr = Color.red(c), cg = Color.green(c), cb = Color.blue(c);
+                int key = ((cr >> 4) << 8) | ((cg >> 4) << 4) | (cb >> 4);
+                int[] a = m.get(key);
+                if (a == null) { a = new int[4]; m.put(key, a); }
+                a[0]++; a[1] += cr; a[2] += cg; a[3] += cb;
+            }
+        }
+        int[] best = null;
+        for (int[] a : m.values()) {
+            if (best == null || a[0] > best[0]) best = a;
+        }
+        if (best == null) return;
+
+        int br = best[1] / best[0], bgc = best[2] / best[0], bb = best[3] / best[0];
+        int lumBg = (299 * br + 587 * bgc + 114 * bb) / 1000;
+
+        int[] txt = null;
+        for (int[] a : m.values()) {
+            int dist = Math.abs(a[1] / a[0] - br) + Math.abs(a[2] / a[0] - bgc)
+                    + Math.abs(a[3] / a[0] - bb);
+            if (dist > 150 && (txt == null || a[0] > txt[0])) txt = a;
+        }
+
+        int fgColor = lumBg > 128 ? Color.BLACK : Color.WHITE;
+        if (txt != null) {
+            int fr = txt[1] / txt[0], fgc = txt[2] / txt[0], fb = txt[3] / txt[0];
+            int lumFg = (299 * fr + 587 * fgc + 114 * fb) / 1000;
+            if (Math.abs(lumFg - lumBg) >= 90) fgColor = Color.rgb(fr, fgc, fb);
+        }k.bg = Color.rgb(br, bgc, bb);
+        k.fg = fgColor;
     }
 
-    private void showPanel(String s) {
-        panel.setText(s);
-        panel.setVisibility(View.VISIBLE);
+    private void translateAll(final List<Blk> list, final String sig) {
+        final int n = list.size();
+        final String[] out = new String[n];
+        final int[] left = {n};
+        for (int i = 0; i < n; i++) {
+            final int idx = i;
+            translator.translate(list.get(i).text)
+                    .addOnSuccessListener(tr -> {
+                        out[idx] = tr;
+                        if (--left[0] == 0) finish(list, out, sig);
+                    })
+                    .addOnFailureListener(e -> {
+                        if (--left[0] == 0) finish(list, out, sig);
+                    });
+        }
+    }
+
+    private void finish(List<Blk> list, String[] out, String sig) {
+        List<Item> items = new ArrayList<>();
+        for (int i = 0; i < list.size(); i++) {
+            if (out[i] != null) items.add(buildItem(list.get(i), out[i]));
+        }
+        if (items.isEmpty()) {
+            toast("Ceviri hatasi");
+            busy = false;
+            return;
+        }
+        lastSig = sig;
+        overlay.setItems(items);
+        overlay.setVisibility(View.VISIBLE);
+        busy = false;
+    }
+
+    private Item buildItem(Blk k, String text) {
+        Rect r = k.rect;
+        int w = Math.max(r.width(), 140);
+        int left = r.centerX() - w / 2;
+        if (r.width() >= 140) left = r.left;float avgLine = r.height() / (float) k.lines;
+        float size = Math.max(18f, avgLine * 0.8f);
+        float minSize = Math.max(14f, size * 0.5f);
+        int availH = (int) (r.height() * 1.25f);
+
+        boolean centered = Math.abs(r.centerX() - sw / 2f) < sw * 0.15f;
+        Layout.Alignment al = centered ? Layout.Alignment.ALIGN_CENTER
+                : Layout.Alignment.ALIGN_NORMAL;
+
+        TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        tp.setColor(k.fg);
+        StaticLayout lay = null;
+        for (int i = 0; i < 14; i++) {
+            tp.setTextSize(size);
+            lay = StaticLayout.Builder.obtain(text, 0, text.length(), tp, w)
+                    .setAlignment(al)
+                    .setIncludePad(false)
+                    .build();
+            if (lay.getHeight() <= availH || size <= minSize) break;
+            size *= 0.92f;
+        }
+
+        int pad = 6;
+        int boxH = Math.max(lay.getHeight(), r.height());
+        Item it = new Item();
+        it.layout = lay;
+        it.bgColor = k.bg;
+        it.tx = left;
+        it.ty = r.top + (boxH - lay.getHeight()) / 2f;
+        it.bg = new RectF(left - pad, r.top - pad, left + w + pad, r.top + boxH + pad);
+        return it;
     }
 
     private void toast(String s) {
         Toast.makeText(getApplicationContext(), s, Toast.LENGTH_LONG).show();
-    }
-
-    @Override
+                }
+                                      @Override
     public void onConfigurationChanged(Configuration c) {
         super.onConfigurationChanged(c);
         if (projection != null && vd != null) {
-            main.postDelayed(this::setupDisplay, 300);
+            main.postDelayed(() -> {
+                setupDisplay();
+                updateOverlaySize();
+            }, 300);
         }
     }
 
@@ -327,8 +551,11 @@ public class CaptureService extends Service {
         super.onDestroy();
         auto = false;
         if (main != null) main.removeCallbacksAndMessages(null);
+        if (prefs != null && prefListener != null) {
+            prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
+        }
         try { if (bubble != null) wm.removeView(bubble); } catch (Exception ignored) {}
-        try { if (panel != null) wm.removeView(panel); } catch (Exception ignored) {}
+        try { if (overlay != null) wm.removeView(overlay); } catch (Exception ignored) {}
         synchronized (lock) {
             if (held != null) { held.close(); held = null; }
         }
@@ -339,4 +566,4 @@ public class CaptureService extends Service {
         if (recognizer != null) recognizer.close();
         if (translator != null) translator.close();
     }
-              }
+}TextPaint tp = new Te
