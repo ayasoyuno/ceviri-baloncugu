@@ -2,47 +2,53 @@ package com.ayaso.ceviri;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.Locale;
+
 public class MainActivity extends Activity {
     private static final int REQ_CAPTURE = 100;
+    private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        prefs = getSharedPreferences("ceviri", MODE_PRIVATE);
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1);
         }
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER);
         root.setPadding(48, 48, 48, 48);
 
         TextView info = new TextView(this);
-        info.setTextSize(16);
-        info.setText("1) Baslat'a bas, izinleri ver.\n"
-                + "2) Ekran paylasimi sorulunca \"Tum ekran\" sec.\n"
-                + "3) Oyuna gec. Baloncuga dokununca ekran cevrilir.\n"
-                + "4) Baloncuga uzun basarsan otomatik mod acilir/kapanir.\n"
-                + "5) Cevirinin ustune dokunursan kapanir.");
+        info.setTextSize(15);
+        info.setText("1) Başlat'a bas, izinleri ver.\n"
+                + "2) Ekran paylaşımı sorulunca \"Tüm ekran\" seç.\n"
+                + "3) Oyuna geç. Baloncuğa dokununca ekran yerinde çevrilir, tekrar dokununca kapanır.\n"
+                + "4) Baloncuğa uzun basarsan otomatik mod açılır/kapanır (baloncuk yeşil olur).");
+        root.addView(info);
 
         Button start = new Button(this);
-        start.setText("Baslat");
+        start.setText("Başlat");
         start.setOnClickListener(v -> {
             if (!Settings.canDrawOverlays(this)) {
                 startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:" + getPackageName())));
-                Toast.makeText(this, "Izni ac, sonra geri donup tekrar Baslat'a bas",
+                Toast.makeText(this, "İzni aç, sonra geri dönüp tekrar Başlat'a bas",
                         Toast.LENGTH_LONG).show();
                 return;
             }
@@ -50,15 +56,61 @@ public class MainActivity extends Activity {
                     (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
             startActivityForResult(m.createScreenCaptureIntent(), REQ_CAPTURE);
         });
+        root.addView(start);
 
         Button stop = new Button(this);
         stop.setText("Durdur");
         stop.setOnClickListener(v -> stopService(new Intent(this, CaptureService.class)));
-
-        root.addView(info);
-        root.addView(start);
         root.addView(stop);
-        setContentView(root);
+
+        TextView head = new TextView(this);
+        head.setTextSize(18);
+        head.setPadding(0, 48, 0, 8);
+        head.setText("Ayarlar (anında uygulanır)");
+        root.addView(head);
+
+        addSeek(root, "Baloncuk boyutu", "size", 30, 100, 52, 1, " dp");
+        addSeek(root, "Baloncuk görünürlüğü", "alpha", 20, 100, 80, 1, " %");
+        addSeek(root, "Otomatik mod aralığı", "speed", 10, 30, 10, 10, " sn");
+
+        Switch smart = new Switch(this);
+        smart.setText("Akıllı mod (orijinal renk ve arka planı kopyala)");
+        smart.setChecked(prefs.getBoolean("smart", true));
+        smart.setPadding(0, 32, 0, 0);
+        smart.setOnCheckedChangeListener((v, c) ->
+                prefs.edit().putBoolean("smart", c).apply());
+        root.addView(smart);
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(root);
+        setContentView(sv);
+    }
+
+    private void addSeek(LinearLayout root, String title, String key,
+                         int min, int max, int def, int div, String unit) {
+        int cur = prefs.getInt(key, def);
+        TextView tv = new TextView(this);
+        tv.setPadding(0, 24, 0, 0);
+        tv.setText(title + ": " + fmt(cur, div) + unit);
+        SeekBar sb = new SeekBar(this);
+        sb.setMax(max - min);
+        sb.setProgress(cur - min);
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int p, boolean user) {
+                int v = p + min;
+                tv.setText(title + ": " + fmt(v, div) + unit);
+                prefs.edit().putInt(key, v).apply();
+            }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        });
+        root.addView(tv);
+        root.addView(sb);
+    }
+
+    private String fmt(int v, int div) {
+        if (div == 1) return String.valueOf(v);
+        return String.format(Locale.US, "%.1f", v / (double) div);
     }
 
     @Override
