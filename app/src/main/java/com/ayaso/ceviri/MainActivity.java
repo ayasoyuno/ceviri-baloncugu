@@ -42,8 +42,9 @@ public class MainActivity extends Activity {
         info.setTextSize(15);
         info.setText("1) Başlat'a bas, izinleri ver.\n"
                 + "2) Ekran paylaşımı sorulunca \"Tüm ekran\" seç.\n"
-                + "3) Oyuna geç. Baloncuğa dokununca ekran yerinde çevrilir, tekrar dokununca kapanır.\n"
-                + "4) Baloncuğa uzun basarsan otomatik mod açılır/kapanır (baloncuk yeşil olur).");
+                + "3) Oyuna geç. Baloncuğa dokununca ekran yerinde çevrilir.\n"
+                + "4) Kapatmak için baloncuğa tekrar dokun ya da alttaki beyaz çubuğu yukarı kaydır.\n"
+                + "5) Baloncuğa uzun basarsan otomatik mod açılır/kapanır (baloncuk yeşil olur).");
         root.addView(info);
 
         Button start = new Button(this);
@@ -76,40 +77,55 @@ public class MainActivity extends Activity {
         addSeek(root, "Baloncuk boyutu", "size", 30, 100, 52, 1, " dp");
         addSeek(root, "Baloncuk görünürlüğü", "alpha", 20, 100, 80, 1, " %");
         addSeek(root, "Otomatik mod aralığı", "speed", 10, 30, 10, 10, " sn");
+        addSeek(root, "Kaplama payı (orijinal yazı sızarsa artır)", "pad", 2, 20, 8, 1, " dp");
 
-        Switch smart = new Switch(this);
-        smart.setText("Akıllı mod (orijinal renk ve arka planı kopyala)");
-        smart.setChecked(prefs.getBoolean("smart", true));
-        smart.setPadding(0, 32, 0, 0);
-        smart.setOnCheckedChangeListener((v, c) ->
-                prefs.edit().putBoolean("smart", c).apply());
-        root.addView(smart);
+        addSwitch(root, "Akıllı mod (orijinal renk ve arka planı kopyala)", "smart", true);
+        addSwitch(root, "Yazıyı ortala (kapalıysa soldan başlar)", "center", false);
+        addSwitch(root, "Dokunma titreşimi", "haptic", true);
+        addSwitch(root, "Alt çubukla kaydırarak kapat", "swipe", true);
 
         TextView aiHead = new TextView(this);
         aiHead.setTextSize(18);
         aiHead.setPadding(0, 48, 0, 8);
-        aiHead.setText("Yapay zeka çevirisi (Gemini)");
+        aiHead.setText("Yapay zeka çevirisi");
         root.addView(aiHead);
 
         TextView aiInfo = new TextView(this);
         aiInfo.setTextSize(14);
-        aiInfo.setText("aistudio.google.com/apikey adresinden ücretsiz anahtar al ve aşağıya yapıştır. "
-                + "Anahtar yoksa ya da hata olursa çevrimdışı çeviri kullanılır.");
+        aiInfo.setText("Anahtarlar ücretsiz alınır. Biri hata verirse diğeri, o da olmazsa "
+                + "çevrimdışı çeviri kullanılır.");
         root.addView(aiInfo);
 
-        Switch ai = new Switch(this);
-        ai.setText("Yapay zeka çevirisini kullan");
-        ai.setChecked(prefs.getBoolean("ai", true));
-        ai.setPadding(0, 24, 0, 0);
-        ai.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean("ai", c).apply());
-        root.addView(ai);
+        addSwitch(root, "Yapay zeka çevirisini kullan", "ai", true);
+        addSwitch(root, "Önce 2. sağlayıcıyı (Groq) dene", "b_first", true);
 
-        addField(root, "API anahtarı", "apikey", "", true);
-        addField(root, "Model adı", "model", "gemini-2.5-flash-lite", false);
+        TextView g1 = new TextView(this);
+        g1.setPadding(0, 32, 0, 0);
+        g1.setText("1. sağlayıcı: Gemini (aistudio.google.com/apikey)");
+        root.addView(g1);
+        addField(root, "Gemini API anahtarı", "apikey", "", true);
+        addField(root, "Gemini model adı", "model", "gemini-3.5-flash-lite", false);
+
+        TextView g2 = new TextView(this);
+        g2.setPadding(0, 32, 0, 0);
+        g2.setText("2. sağlayıcı: Groq (console.groq.com) ya da OpenAI uyumlu servis");
+        root.addView(g2);
+        addField(root, "Adres", "b_url", "https://api.groq.com/openai/v1", false);
+        addField(root, "API anahtarı", "b_key", "", true);
+        addField(root, "Model adı", "b_model", "openai/gpt-oss-120b", false);
 
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
         setContentView(sv);
+    }
+
+    private void addSwitch(LinearLayout root, String text, String key, boolean def) {
+        Switch s = new Switch(this);
+        s.setText(text);
+        s.setChecked(prefs.getBoolean(key, def));
+        s.setPadding(0, 24, 0, 0);
+        s.setOnCheckedChangeListener((v, c) -> prefs.edit().putBoolean(key, c).apply());
+        root.addView(s);
     }
 
     private void addField(LinearLayout root, String hint, String key, String def, boolean secret) {
