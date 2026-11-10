@@ -522,6 +522,14 @@ public class CaptureService extends Service {
                     if (auto && s.equals(lastSig)) {
                         busy = false;
                         return;
+                    }                    if (prefs.getBoolean("pending", true)) {
+                        List<RectF> pend = new ArrayList<>();
+                        for (Blk k : list) {
+                            pend.add(new RectF(k.rect.left - 6, k.rect.top - 6,
+                                    k.rect.right + 6, k.rect.bottom + 6));
+                        }
+                        overlay.setPending(pend);
+                        overlay.setVisibility(View.VISIBLE);
                     }
                     translateSmart(list, s);
                 })
