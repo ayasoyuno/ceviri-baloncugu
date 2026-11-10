@@ -28,6 +28,8 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -60,7 +62,7 @@ public class CaptureService extends Service {
         Rect rect;
         String text;
         int lines;
-        int bg = 0xE6000000;
+        int bg = 0xFF000000;
         int fg = Color.WHITE;
     }
 
@@ -97,7 +99,9 @@ public class CaptureService extends Service {
     private SharedPreferences.OnSharedPreferenceChangeListener prefListener;
     private OverlayView overlay;
     private View bubble;
-    private WindowManager.LayoutParams overlayLp, bubbleLp;
+    private View swipeBar;
+    private WindowManager.LayoutParams overlayLp, bubbleLp, swipeLp;
+    private boolean swipeAttached = false;
     private MediaProjection projection;
     private VirtualDisplay vd;
     private ImageReader reader;
@@ -113,6 +117,7 @@ public class CaptureService extends Service {
     private String lastSig = "";
     private int sw, sh;
     private float density;
+    private long pauseA = 0, pauseB = 0, lastWarn = 0;
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
@@ -227,6 +232,68 @@ public class CaptureService extends Service {
         try { wm.updateViewLayout(bubble, bubbleLp); } catch (Exception ignored) {}
     }
 
+    private void buzz(long ms) {
+        if (!prefs.getBoolean("haptic", true)) return;
+        try {
+            Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (v != null) {
+                v.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE));
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void setupSwipeBar() {
+        swipeBar = new View(this);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.RECTANGLE);
+        g.setCornerRadius(40 * density);
+        g.setColor(0x88FFFFFF);
+        g.setStroke(2, 0x88000000);
+        swipeBar.setBackground(g);
+        swipeLp = new WindowManager.LayoutParams((int) (150 * density), (int) (26 * density),
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        swipeLp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        swipeLp.y = (int) (44 * density);
+        swipeBar.setOnTouchListener(new View.OnTouchListener() {
+            float y0;
+            boolean done;
+
+            @Override public boolean onTouch(View v, MotionEvent e) {
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    y0 = e.getRawY();
+                    done = false;
+                } else if (e.getActionMasked() == MotionEvent.ACTION_MOVE && !done
+                        && y0 - e.getRawY() > 50 * density) {
+                    done = true;
+                    buzz(30);
+                    main.post(() -> dismissByUser());
+                }
+                return true;
+            }
+        });
+    }
+
+    private void showSwipeBar() {
+        if (!prefs.getBoolean("swipe", true) || swipeAttached) return;
+        try {
+            wm.addView(swipeBar, swipeLp);
+            swipeAttached = true;
+        } catch (Exception ignored) {}
+    }
+
+    private void hideSwipeBar() {
+        if (!swipeAttached) return;
+        try { wm.removeView(swipeBar); } catch (Exception ignored) {}
+        swipeAttached = false;
+    }
+
+    private void dismissByUser() {
+        if (auto) toggleAuto(); else clearOverlay();
+    }
+
     private void setupViews() {
         int type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 
@@ -251,7 +318,7 @@ public class CaptureService extends Service {
         }
         wm.addView(overlay, overlayLp);
 
-        // Baloncuk (ceviri katmanindan sonra eklenir, hep ustte kalir)
+        // Baloncuk
         bubble = new View(this);
         bubble.setBackground(circle(0xFF2979FF));
         int size = (int) (prefs.getInt("size", 52) * density);
@@ -276,6 +343,7 @@ public class CaptureService extends Service {
                         tx = e.getRawX(); ty = e.getRawY();
                         t0 = System.currentTimeMillis();
                         moved = false;
+                        bubble.animate().scaleX(0.82f).scaleY(0.82f).setDuration(80).start();
                         return true;
                     case MotionEvent.ACTION_MOVE:
                         float dx = e.getRawX() - tx, dy = e.getRawY() - ty;
@@ -287,13 +355,19 @@ public class CaptureService extends Service {
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
-                        if (!moved) {
+                    case MotionEvent.ACTION_CANCEL:
+                        bubble.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+                        if (e.getActionMasked() == MotionEvent.ACTION_UP && !moved) {
                             if (System.currentTimeMillis() - t0 > 600) {
+                                buzz(60);
                                 toggleAuto();
-                            } else if (!auto && overlay.getVisibility() == View.VISIBLE) {
-                                clearOverlay();
                             } else {
-                                capture();
+                                buzz(25);
+                                if (!auto && overlay.getVisibility() == View.VISIBLE) {
+                                    clearOverlay();
+                                } else {
+                                    capture();
+                                }
                             }
                         }
                         return true;
@@ -302,6 +376,8 @@ public class CaptureService extends Service {
             }
         });
         wm.addView(bubble, bubbleLp);
+
+        setupSwipeBar();
 
         prefListener = (sp, key) -> applyBubblePrefs();
         prefs.registerOnSharedPreferenceChangeListener(prefListener);
@@ -317,11 +393,10 @@ public class CaptureService extends Service {
         translator.downloadModelIfNeeded(new DownloadConditions.Builder().build())
                 .addOnSuccessListener(v -> { modelReady = true; toast("Ceviri hazir!"); })
                 .addOnFailureListener(e -> toast("Model indirilemedi, interneti kontrol et"));
-    }
-
-    private void clearOverlay() {
+    }    private void clearOverlay() {
         overlay.setItems(new ArrayList<Item>());
         overlay.setVisibility(View.INVISIBLE);
+        hideSwipeBar();
         lastSig = "";
     }
 
@@ -371,11 +446,17 @@ public class CaptureService extends Service {
         busy = true;
         final boolean wasShown = overlay.getVisibility() == View.VISIBLE;
         // Kendi cevirimizi okumamak icin yakalama aninda katmani gizliyoruz
-        if (wasShown) overlay.setVisibility(View.INVISIBLE);
+        if (wasShown) {
+            overlay.setVisibility(View.INVISIBLE);
+            if (swipeAttached) swipeBar.setVisibility(View.INVISIBLE);
+        }
         main.postDelayed(() -> bg.post(() -> {
             final Bitmap bmp = grab();
             main.post(() -> {
-                if (wasShown) overlay.setVisibility(View.VISIBLE);
+                if (wasShown) {
+                    overlay.setVisibility(View.VISIBLE);
+                    if (swipeAttached) swipeBar.setVisibility(View.VISIBLE);
+                }
                 if (bmp == null) {
                     busy = false;
                     toast("Ekran goruntusu alinamadi, tekrar dene");
@@ -433,7 +514,7 @@ public class CaptureService extends Service {
     }
 
     private void sampleColors(Bitmap bmp, Blk k, boolean smart) {
-        k.bg = 0xE6000000;
+        k.bg = 0xFF000000;
         k.fg = Color.WHITE;
         if (!smart) return;
 
@@ -480,6 +561,64 @@ public class CaptureService extends Service {
         k.fg = fgColor;
     }
 
+    private void translateSmart(List<Blk> list, String sig) {
+        String[] texts = new String[list.size()];
+        for (int i = 0; i < texts.length; i++) texts[i] = list.get(i).text;
+        boolean bFirst = prefs.getBoolean("b_first", true);
+        int[] order = bFirst ? new int[]{1, 0} : new int[]{0, 1};
+        runChain(list, sig, texts, order, 0);
+    }
+
+    private void runChain(final List<Blk> list, final String sig, final String[] texts,
+                          final int[] order, final int idx) {
+        if (!prefs.getBoolean("ai", true) || idx >= order.length) {
+            translateAll(list, sig);
+            return;
+        }
+        final int p = order[idx];
+        String key;
+        String model;
+        String base = "";
+        if (p == 0) {
+            key = prefs.getString("apikey", "").trim();
+            model = prefs.getString("model", "gemini-3.5-flash-lite").trim();
+            if (model.isEmpty()) model = "gemini-3.5-flash-lite";
+        } else {
+            key = prefs.getString("b_key", "").trim();
+            model = prefs.getString("b_model", "openai/gpt-oss-120b").trim();
+            if (model.isEmpty()) model = "openai/gpt-oss-120b";
+            base = prefs.getString("b_url", "https://api.groq.com/openai/v1").trim();
+            if (base.isEmpty()) base = "https://api.groq.com/openai/v1";
+        }
+        long paused = (p == 0) ? pauseA : pauseB;
+        if (key.isEmpty() || System.currentTimeMillis() < paused) {
+            runChain(list, sig, texts, order, idx + 1);
+            return;
+        }
+
+        GeminiTranslator.Callback cb = (out, err, limited) -> {
+            if (out != null) {
+                finish(list, out, sig);
+                return;
+            }
+            long t = System.currentTimeMillis();
+            if (limited) {
+                if (p == 0) pauseA = t + 60000; else pauseB = t + 60000;
+            }
+            if (t - lastWarn > 30000) {
+                lastWarn = t;
+                toast((p == 0 ? "Gemini" : "2. yapay zeka") + " calismadi (" + err + ")");
+            }
+            runChain(list, sig, texts, order, idx + 1);
+        };
+        if (p == 0) {
+            GeminiTranslator.translate(key, model, texts, cb);
+        } else {
+            OpenAiTranslator.translate(base, key, model, texts, cb);
+        }
+    }
+
+    // Cevrimdisi yedek ceviri
     private void translateAll(final List<Blk> list, final String sig) {
         final int n = list.size();
         final String[] out = new String[n];
@@ -510,23 +649,23 @@ public class CaptureService extends Service {
         lastSig = sig;
         overlay.setItems(items);
         overlay.setVisibility(View.VISIBLE);
+        showSwipeBar();
         busy = false;
     }
 
     private Item buildItem(Blk k, String text) {
         Rect r = k.rect;
         int w = Math.max(r.width(), 140);
-        int left = r.centerX() - w / 2;
-        if (r.width() >= 140) left = r.left;
+        int left = r.left;
+        if (r.width() < 140) left = r.centerX() - w / 2;
 
         float avgLine = r.height() / (float) k.lines;
         float size = Math.max(18f, avgLine * 0.8f);
         float minSize = Math.max(14f, size * 0.5f);
         int availH = (int) (r.height() * 1.25f);
 
-        boolean centered = Math.abs(r.centerX() - sw / 2f) < sw * 0.15f;
-        Layout.Alignment al = centered ? Layout.Alignment.ALIGN_CENTER
-                : Layout.Alignment.ALIGN_NORMAL;
+        Layout.Alignment al = prefs.getBoolean("center", false)
+                ? Layout.Alignment.ALIGN_CENTER : Layout.Alignment.ALIGN_NORMAL;
 
         TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         tp.setColor(k.fg);
@@ -541,14 +680,17 @@ public class CaptureService extends Service {
             size *= 0.92f;
         }
 
-        int pad = 6;
+        float padBase = prefs.getInt("pad", 8) * density;
+        float extra = avgLine * 0.15f;
+        float padX = padBase * 1.5f + extra;
+        float padY = padBase + extra;
         int boxH = Math.max(lay.getHeight(), r.height());
         Item it = new Item();
         it.layout = lay;
         it.bgColor = k.bg;
         it.tx = left;
         it.ty = r.top + (boxH - lay.getHeight()) / 2f;
-        it.bg = new RectF(left - pad, r.top - pad, left + w + pad, r.top + boxH + pad);
+        it.bg = new RectF(left - padX, r.top - padY, left + w + padX, r.top + boxH + padY);
         return it;
     }
 
@@ -575,6 +717,7 @@ public class CaptureService extends Service {
         if (prefs != null && prefListener != null) {
             prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
         }
+        hideSwipeBar();
         try { if (bubble != null) wm.removeView(bubble); } catch (Exception ignored) {}
         try { if (overlay != null) wm.removeView(overlay); } catch (Exception ignored) {}
         synchronized (lock) {
@@ -586,33 +729,5 @@ public class CaptureService extends Service {
         if (ht != null) ht.quit();
         if (recognizer != null) recognizer.close();
         if (translator != null) translator.close();
-    }
-        private long aiPause = 0;
-    private long lastWarn = 0;
-
-    private void translateSmart(final List<Blk> list, final String sig) {
-        final String key = prefs.getString("apikey", "").trim();
-        if (!prefs.getBoolean("ai", true) || key.isEmpty()
-                || System.currentTimeMillis() < aiPause) {
-            translateAll(list, sig);
-            return;
-        }
-        String model = prefs.getString("model", "gemini-2.5-flash-lite").trim();
-        if (model.isEmpty()) model = "gemini-2.5-flash-lite";
-        String[] texts = new String[list.size()];
-        for (int i = 0; i < texts.length; i++) texts[i] = list.get(i).text;
-        GeminiTranslator.translate(key, model, texts, (out, err, limited) -> {
-            if (out != null) {
-                finish(list, out, sig);
-                return;
-            }
-            long now = System.currentTimeMillis();
-            if (limited) aiPause = now + 60000;
-            if (now - lastWarn > 30000) {
-                lastWarn = now;
-                toast("Yapay zeka cevirisi calismadi (" + err + "), offline ceviriye gecildi");
-            }
-            translateAll(list, sig);
-        });
     }
 }
