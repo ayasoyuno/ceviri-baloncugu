@@ -662,8 +662,8 @@ public class CaptureService extends Service {
         }
     }
 
-    private void finish(List<Blk> list, String[] out, String sig) {
-                List<Item> items = new ArrayList<>();
+        private void finish(List<Blk> list, String[] out, String sig) {
+        List<Item> items = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
             if (out[i] != null) items.add(buildItem(list.get(i), out[i]));
         }
@@ -673,6 +673,12 @@ public class CaptureService extends Service {
             if (!overlay.hasItems()) overlay.setVisibility(View.INVISIBLE);
             busy = false;
             return;
+        }
+        lastSig = sig;
+        overlay.setItems(items);
+        overlay.setVisibility(View.VISIBLE);
+        showSwipeBar();
+        busy = false;
         }
 
     private Item buildItem(Blk k, String text) {
