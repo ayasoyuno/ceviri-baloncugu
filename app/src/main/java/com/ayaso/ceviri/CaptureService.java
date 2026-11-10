@@ -412,6 +412,7 @@ public class CaptureService extends Service {
                 .addOnFailureListener(e -> toast("Model indirilemedi, interneti kontrol et"));
     }    private void clearOverlay() {
         overlay.setItems(new ArrayList<Item>());
+        overlay.setPending(new ArrayList<RectF>());
         overlay.setVisibility(View.INVISIBLE);
         hideSwipeBar();
         lastSig = "";
