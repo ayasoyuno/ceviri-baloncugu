@@ -73,13 +73,24 @@ public class CaptureService extends Service {
         float tx, ty;
     }
 
-    static class OverlayView extends View {
+        static class OverlayView extends View {
         private List<Item> items = new ArrayList<>();
+        private List<RectF> pending = new ArrayList<>();
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        OverlayView(Context c) { super(c); }
+        OverlayView(Context c) {
+            super(c);
+            line.setStyle(Paint.Style.STROKE);
+            line.setColor(0xFF00E676);
+            line.setStrokeWidth(2.5f * c.getResources().getDisplayMetrics().density);
+        }
 
         void setItems(List<Item> l) { items = l; invalidate(); }
+
+        boolean hasItems() { return !items.isEmpty(); }
+
+        void setPending(List<RectF> l) { pending = l; invalidate(); }
 
         @Override
         protected void onDraw(Canvas c) {
@@ -91,8 +102,14 @@ public class CaptureService extends Service {
                 it.layout.draw(c);
                 c.restore();
             }
+            if (!pending.isEmpty()) {
+                double wave = 0.5 + 0.5 * Math.sin(System.currentTimeMillis() / 95.0);
+                line.setAlpha((int) (70 + 185 * wave));
+                for (RectF r : pending) c.drawRoundRect(r, 10f, 10f, line);
+                postInvalidateOnAnimation();
+            }
         }
-    }
+        }
 
     private WindowManager wm;
     private SharedPreferences prefs;
