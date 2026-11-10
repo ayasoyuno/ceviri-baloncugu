@@ -83,6 +83,7 @@ public class MainActivity extends Activity {
         addSwitch(root, "Yazıyı ortala (kapalıysa soldan başlar)", "center", false);
         addSwitch(root, "Dokunma titreşimi", "haptic", true);
         addSwitch(root, "Alt çubukla kaydırarak kapat", "swipe", true);
+        addSwitch(root, "Çevrilirken yeşil çerçeve", "pending", true);
 
         TextView aiHead = new TextView(this);
         aiHead.setTextSize(18);
