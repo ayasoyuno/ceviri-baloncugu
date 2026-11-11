@@ -401,7 +401,10 @@ public class CaptureService extends Service {
 
         setupSwipeBar();
 
-        prefListener = (sp, key) -> applyBubblePrefs();
+                prefListener = (sp, key) -> {
+            applyBubblePrefs();
+            if ("glossary".equals(key)) cache.clear();
+        };
         prefs.registerOnSharedPreferenceChangeListener(prefListener);
     }
 
@@ -592,13 +595,24 @@ public class CaptureService extends Service {
         k.fg = fgColor;
     }
 
-    private void translateSmart(List<Blk> list, String sig) {
+        private void translateSmart(List<Blk> list, String sig) {
         String[] texts = new String[list.size()];
-        for (int i = 0; i < texts.length; i++) texts[i] = list.get(i).text;
+        String[] cached = new String[list.size()];
+        boolean all = true;
+        for (int i = 0; i < texts.length; i++) {
+            texts[i] = list.get(i).text;
+            cached[i] = cache.get(texts[i]);
+            if (cached[i] == null) all = false;
+        }
+        if (all && prefs.getBoolean("ai", true)) {
+            finish(list, cached, sig);
+            return;
+        }
+        GeminiTranslator.glossary = prefs.getString("glossary", "").trim();
         boolean bFirst = prefs.getBoolean("b_first", true);
         int[] order = bFirst ? new int[]{1, 0} : new int[]{0, 1};
         runChain(list, sig, texts, order, 0);
-    }
+        }
 
     private void runChain(final List<Blk> list, final String sig, final String[] texts,
                           final int[] order, final int idx) {
