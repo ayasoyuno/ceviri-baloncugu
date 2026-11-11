@@ -117,6 +117,7 @@ public class MainActivity extends Activity {
         addField(root, "Adres", "b_url", "https://api.groq.com/openai/v1", false);
         addField(root, "API anahtarı", "b_key", "", true);
         addField(root, "Model adı", "b_model", "openai/gpt-oss-120b", false);
+        addGlossary(root);
 
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
@@ -148,7 +149,25 @@ public class MainActivity extends Activity {
         }
         root.addView(row);
     }
-
+    private void addGlossary(LinearLayout root) {
+        TextView t = new TextView(this);
+        t.setPadding(0, 32, 0, 0);
+        t.setText("Terim listesi (her satıra bir tane, örnek: Mage = Büyücü)");
+        root.addView(t);
+        EditText et = new EditText(this);
+        et.setHint("Quest = Görev\nMage = Büyücü");
+        et.setMinLines(3);
+        et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        et.setText(prefs.getString("glossary", ""));
+        et.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int c, int d) {}
+            @Override public void onTextChanged(CharSequence s, int a, int c, int d) {}
+            @Override public void afterTextChanged(Editable e) {
+                prefs.edit().putString("glossary", e.toString()).apply();
+            }
+        });
+        root.addView(et);
+    }
     private void addSwitch(LinearLayout root, String text, String key, boolean def) {
         Switch s = new Switch(this);
         s.setText(text);
