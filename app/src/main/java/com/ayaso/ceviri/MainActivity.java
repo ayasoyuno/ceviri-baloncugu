@@ -19,6 +19,8 @@ import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.graphics.drawable.GradientDrawable;
+import android.view.View;
 
 import java.util.Locale;
 
@@ -76,6 +78,7 @@ public class MainActivity extends Activity {
 
         addSeek(root, "Baloncuk boyutu", "size", 30, 100, 52, 1, " dp");
         addSeek(root, "Baloncuk görünürlüğü", "alpha", 20, 100, 80, 1, " %");
+                addColors(root);
         addSeek(root, "Otomatik mod aralığı", "speed", 10, 30, 10, 10, " sn");
         addSeek(root, "Kaplama payı (orijinal yazı sızarsa artır)", "pad", 2, 20, 8, 1, " dp");
 
@@ -118,6 +121,32 @@ public class MainActivity extends Activity {
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
         setContentView(sv);
+    }    private void addColors(LinearLayout root) {
+        TextView t = new TextView(this);
+        t.setPadding(0, 24, 0, 8);
+        t.setText("Baloncuk rengi");
+        root.addView(t);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        int[] colors = {0xFF2979FF, 0xFFE53935, 0xFFFB8C00, 0xFF8E24AA,
+                0xFFEC407A, 0xFF00ACC1, 0xFF424242};
+        for (int c : colors) {
+            View v = new View(this);
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setColor(c);
+            g.setStroke(3, 0xFF888888);
+            v.setBackground(g);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(88, 88);
+            lp.setMargins(0, 0, 20, 0);
+            v.setLayoutParams(lp);
+            v.setOnClickListener(x -> {
+                prefs.edit().putInt("bcolor", c).apply();
+                Toast.makeText(this, "Renk seçildi", Toast.LENGTH_SHORT).show();
+            });
+            row.addView(v);
+        }
+        root.addView(row);
     }
 
     private void addSwitch(LinearLayout root, String text, String key, boolean def) {
