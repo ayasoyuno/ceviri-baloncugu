@@ -238,6 +238,9 @@ public class CaptureService extends Service {
         g.setColor(color);
         g.setStroke(4, Color.WHITE);
         return g;
+    }  
+    private int idleColor() {
+        return prefs.getInt("bcolor", 0xFF2979FF);
     }
 
     private void applyBubblePrefs() {
@@ -246,6 +249,7 @@ public class CaptureService extends Service {
         bubbleLp.width = size;
         bubbleLp.height = size;
         bubble.setAlpha(prefs.getInt("alpha", 80) / 100f);
+        bubble.setBackground(circle(auto ? 0xFF00C853 : idleColor()));
         try { wm.updateViewLayout(bubble, bubbleLp); } catch (Exception ignored) {}
     }
 
@@ -337,7 +341,7 @@ public class CaptureService extends Service {
 
         // Baloncuk
         bubble = new View(this);
-        bubble.setBackground(circle(0xFF2979FF));
+        bubble.setBackground(circle(idleColor()));
         int size = (int) (prefs.getInt("size", 52) * density);
         bubble.setAlpha(prefs.getInt("alpha", 80) / 100f);
         bubbleLp = new WindowManager.LayoutParams(size, size, type,
@@ -420,7 +424,7 @@ public class CaptureService extends Service {
 
     private void toggleAuto() {
         auto = !auto;
-        bubble.setBackground(circle(auto ? 0xFF00C853 : 0xFF2979FF));
+        bubble.setBackground(circle(auto ? 0xFF00C853 : idleColor()));
         if (auto) {
             lastSig = "";
             main.post(loop);
