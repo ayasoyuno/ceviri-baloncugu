@@ -62,6 +62,10 @@ public class OpenAiTranslator {
                 + "Keep character names, numbers and symbols as they are when appropriate. "
                 + "Return ONLY a JSON array of strings with exactly " + texts.length
                 + " items, in the same order. No explanations.";
+                    if (!GeminiTranslator.glossary.isEmpty()) {
+            sys += " Use these fixed translations whenever the term appears: "
+                    + GeminiTranslator.glossary.replace("\n", "; ") + ".";
+                                }
 
         JSONArray msgs = new JSONArray();
         msgs.put(new JSONObject().put("role", "system").put("content", sys));
