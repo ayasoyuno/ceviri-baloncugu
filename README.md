@@ -1,4 +1,4 @@
-Yapay zeka çevirili (Gemini), çevrimdışı da kullanabileceğiniz (yapay zeka için 
+Yapay zeka çevirili (Gemini+başka eklenebilir sonradan), çevrimdışı da kullanabileceğiniz (yapay zeka için 
 İnternet gereklidir) bir çeviri uygulaması. Andorid cihazlarda ücretsiz, reklamsız
 kullanabilirsiniz. Oyun içinde kullanılmak için tasarlanmıştır. Claude ile tasarladık.
 Öneri ve istek için yorum felan varsa burada yazabilirsiniz. Yoksa arada bir güncelleme 
