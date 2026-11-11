@@ -135,6 +135,7 @@ public class CaptureService extends Service {
     private int sw, sh;
     private float density;
     private long pauseA = 0, pauseB = 0, lastWarn = 0;
+    private final HashMap<String, String> cache = new HashMap<>();
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
