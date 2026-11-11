@@ -643,6 +643,10 @@ public class CaptureService extends Service {
 
         GeminiTranslator.Callback cb = (out, err, limited) -> {
             if (out != null) {
+            if (cache.size() > 500) cache.clear();
+                for (int i = 0; i < out.length && i < list.size(); i++) {
+                    cache.put(list.get(i).text, out[i]);
+                }
                 finish(list, out, sig);
                 return;
             }
