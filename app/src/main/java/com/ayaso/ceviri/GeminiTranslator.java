@@ -28,6 +28,7 @@ public class GeminiTranslator {
 
     private static final ExecutorService EX = Executors.newSingleThreadExecutor();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    public static volatile String glossary = "";
 
     public static void translate(final String key, final String model,
                                  final String[] texts, final Callback cb) {
@@ -62,6 +63,10 @@ public class GeminiTranslator {
                 + "Keep character names, numbers and symbols as they are when appropriate. "
                 + "Return ONLY a JSON array of strings with exactly " + texts.length
                 + " items, in the same order. No explanations.";
+                if (!glossary.isEmpty()) {
+            sys += " Use these fixed translations whenever the term appears: "
+                    + glossary.replace("\n", "; ") + ".";
+                }
 
         JSONObject body = new JSONObject();
         body.put("systemInstruction", new JSONObject().put("parts",
