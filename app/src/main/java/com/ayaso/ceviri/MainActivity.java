@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         addSeek(root, "Baloncuk görünürlüğü", "alpha", 20, 100, 80, 1, " %");
                 addColors(root);
         addSeek(root, "Otomatik mod aralığı", "speed", 10, 30, 10, 10, " sn");
-        addSeek(root, "Kaplama payı (orijinal yazı sızarsa artır)", "pad", 2, 20, 8, 1, " dp");
+        addSeek(root, "Kaplama payı (orijinal yazı sızarsa artır)", "pad", 2, 20, 4, 1, " dp");
 
         addSwitch(root, "Akıllı mod (orijinal renk ve arka planı kopyala)", "smart", true);
         addSwitch(root, "Yazıyı ortala (kapalıysa soldan başlar)", "center", false);
