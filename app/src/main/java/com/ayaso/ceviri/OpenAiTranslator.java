@@ -59,7 +59,7 @@ public class OpenAiTranslator {
                 + "the way a native Turkish gamer would read it in a game. "
                 + "The strings are from one screen, so use them as context for each other. "
                 + "The text comes from OCR and may contain small recognition errors; fix them silently. "
-                + "Keep character names, numbers and symbols as they are when appropriate. "
+                + "Never translate character names, place names or other proper nouns; keep them exactly as written. Keep numbers and symbols as they are. "
                 + "Return ONLY a JSON array of strings with exactly " + texts.length
                 + " items, in the same order. No explanations.";
                     if (!GeminiTranslator.glossary.isEmpty()) {
