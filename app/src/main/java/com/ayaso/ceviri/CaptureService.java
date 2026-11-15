@@ -67,6 +67,7 @@ public class CaptureService extends Service {
     }
 
     static class Item {
+        RectF src;
         RectF bg;
         int bgColor;
         StaticLayout layout;
@@ -691,6 +692,7 @@ public class CaptureService extends Service {
             if (out[i] != null) items.add(buildItem(list.get(i), out[i]));
         }
         overlay.setPending(new ArrayList<RectF>());
+        resolveOverlaps(items);
         if (items.isEmpty()) {
             toast("Ceviri hatasi");
             if (!overlay.hasItems()) overlay.setVisibility(View.INVISIBLE);
@@ -703,17 +705,38 @@ public class CaptureService extends Service {
         showSwipeBar();
         busy = false;
         }
-
-    private Item buildItem(Blk k, String text) {
+    private void resolveOverlaps(List<Item> items) {
+        for (int i = 0; i < items.size(); i++) {
+            for (int j = i + 1; j < items.size(); j++) {
+                Item a = items.get(i);
+                Item b = items.get(j);
+                if (!RectF.intersects(a.bg, b.bg)) continue;
+                if (RectF.intersects(a.src, b.src)) continue;
+                if (a.src.bottom <= b.src.top || b.src.bottom <= a.src.top) {
+                    Item up = a.src.top < b.src.top ? a : b;
+                    Item dn = (up == a) ? b : a;
+                    float mid = (up.src.bottom + dn.src.top) / 2f;
+                    up.bg.bottom = Math.min(up.bg.bottom, mid);
+                    dn.bg.top = Math.max(dn.bg.top, mid);
+                } else {
+                    Item lf = a.src.left < b.src.left ? a : b;
+                    Item rt = (lf == a) ? b : a;
+                    float mid = (lf.src.right + rt.src.left) / 2f;
+                    lf.bg.right = Math.min(lf.bg.right, mid);
+                    rt.bg.left = Math.max(rt.bg.left, mid);
+                }
+            }
+        }
+    }
+        private Item buildItem(Blk k, String text) {
         Rect r = k.rect;
-        int w = Math.max(r.width(), 140);
+        int w = Math.max(r.width(), 60);
         int left = r.left;
-        if (r.width() < 140) left = r.centerX() - w / 2;
 
         float avgLine = r.height() / (float) k.lines;
-        float size = Math.max(18f, avgLine * 0.8f);
-        float minSize = Math.max(14f, size * 0.5f);
-        int availH = (int) (r.height() * 1.25f);
+        float size = Math.max(14f, avgLine * 0.85f);
+        float minSize = Math.max(9f, size * 0.35f);
+        int availH = r.height();
 
         Layout.Alignment al = prefs.getBoolean("center", false)
                 ? Layout.Alignment.ALIGN_CENTER : Layout.Alignment.ALIGN_NORMAL;
@@ -721,29 +744,27 @@ public class CaptureService extends Service {
         TextPaint tp = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         tp.setColor(k.fg);
         StaticLayout lay = null;
-        for (int i = 0; i < 14; i++) {
+        for (int i = 0; i < 30; i++) {
             tp.setTextSize(size);
             lay = StaticLayout.Builder.obtain(text, 0, text.length(), tp, w)
                     .setAlignment(al)
                     .setIncludePad(false)
                     .build();
             if (lay.getHeight() <= availH || size <= minSize) break;
-            size *= 0.92f;
+            size *= 0.94f;
         }
 
-        float padBase = prefs.getInt("pad", 8) * density;
-        float extra = avgLine * 0.15f;
-        float padX = padBase * 1.5f + extra;
-        float padY = padBase + extra;
+        float pad = prefs.getInt("pad", 4) * density;
         int boxH = Math.max(lay.getHeight(), r.height());
         Item it = new Item();
         it.layout = lay;
         it.bgColor = k.bg;
+        it.src = new RectF(r.left, r.top, r.left + w, r.top + boxH);
         it.tx = left;
         it.ty = r.top + (boxH - lay.getHeight()) / 2f;
-        it.bg = new RectF(left - padX, r.top - padY, left + w + padX, r.top + boxH + padY);
+        it.bg = new RectF(left - pad, r.top - pad, left + w + pad, r.top + boxH + pad);
         return it;
-    }
+        }
 
     private void toast(String s) {
         Toast.makeText(getApplicationContext(), s, Toast.LENGTH_LONG).show();
