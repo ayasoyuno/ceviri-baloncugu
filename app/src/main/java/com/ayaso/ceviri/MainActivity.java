@@ -81,12 +81,14 @@ public class MainActivity extends Activity {
                 addColors(root);
         addSeek(root, "Otomatik mod aralığı", "speed", 10, 30, 10, 10, " sn");
         addSeek(root, "Kaplama payı (orijinal yazı sızarsa artır)", "pad", 2, 20, 4, 1, " dp");
+        addSeek(root, "Çeviri yazı boyutu", "tsize", 50, 130, 100, 1, " %");
 
         addSwitch(root, "Akıllı mod (orijinal renk ve arka planı kopyala)", "smart", true);
         addSwitch(root, "Yazıyı ortala (kapalıysa soldan başlar)", "center", false);
         addSwitch(root, "Dokunma titreşimi", "haptic", true);
         addSwitch(root, "Alt çubukla kaydırarak kapat", "swipe", true);
         addSwitch(root, "Çevrilirken yeşil çerçeve", "pending", true);
+        addSwitch(root, "Akıllı birleştirme (yakın satırları tek paragraf yap)", "merge", true);
 
         TextView aiHead = new TextView(this);
         aiHead.setTextSize(18);
@@ -102,6 +104,7 @@ public class MainActivity extends Activity {
 
         addSwitch(root, "Yapay zeka çevirisini kullan", "ai", true);
         addSwitch(root, "Önce 2. sağlayıcıyı (Groq) dene", "b_first", true);
+        addSwitch(root, "Önceki satırları bağlam olarak kullan", "context", true);
 
         TextView g1 = new TextView(this);
         g1.setPadding(0, 32, 0, 0);
