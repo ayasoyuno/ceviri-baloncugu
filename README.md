@@ -1,3 +1,6 @@
+KURULUM: Actions sekmesinden en son güncellenen içeriğe tıklayıp sayfa sonundan ZIP dosyasının indirmesine tıklayın. ZIP i klasöre çıkartın. İçindeki apk dosyası ile kurulumu gerçekleştirin. 
+
+
 Yapay zeka çevirili (Gemini+başka eklenebilir sonradan), çevrimdışı da kullanabileceğiniz (yapay zeka için 
 İnternet gereklidir) bir çeviri uygulaması. Andorid cihazlarda ücretsiz, reklamsız
 kullanabilirsiniz. Oyun içinde kullanılmak için tasarlanmıştır. Claude ile tasarladık.
