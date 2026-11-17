@@ -137,6 +137,7 @@ public class CaptureService extends Service {
     private float density;
     private long pauseA = 0, pauseB = 0, lastWarn = 0;
     private final HashMap<String, String> cache = new HashMap<>();
+    private final ArrayList<String> history = new ArrayList<>();
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
@@ -506,7 +507,6 @@ public class CaptureService extends Service {
                 .addOnSuccessListener(res -> {
                     boolean smart = prefs.getBoolean("smart", true);
                     List<Blk> list = new ArrayList<>();
-                    StringBuilder sig = new StringBuilder();
                     for (Text.TextBlock b : res.getTextBlocks()) {
                         Rect r = b.getBoundingBox();
                         String t = b.getText().replace("\n", " ").trim();
@@ -515,9 +515,13 @@ public class CaptureService extends Service {
                         k.rect = new Rect(r);
                         k.text = t;
                         k.lines = Math.max(1, b.getLines().size());
-                        sampleColors(bmp, k, smart);
                         list.add(k);
-                        sig.append(t).append('|');
+                    }
+                    if (prefs.getBoolean("merge", true)) list = mergeBlocks(list);
+                    StringBuilder sig = new StringBuilder();
+                    for (Blk k : list) {
+                        sampleColors(bmp, k, smart);
+                        sig.append(k.text).append('|');
                     }
                     bmp.recycle();
 
@@ -595,7 +599,68 @@ public class CaptureService extends Service {
         k.bg = Color.rgb(br, bgc, bb);
         k.fg = fgColor;
     }
+    private boolean canMerge(Blk a, Blk b) {
+        float la = a.rect.height() / (float) a.lines;
+        float lb = b.rect.height() / (float) b.lines;
+        float ratio = la / lb;
+        if (ratio < 0.75f || ratio > 1.33f) return false;
+        float gap = b.rect.top - a.rect.bottom;
+        if (gap < -la * 0.3f || gap > la * 0.4f) return false;
+        boolean leftOk = Math.abs(a.rect.left - b.rect.left) <= la * 1.5f;
+        boolean centerOk = Math.abs(a.rect.centerX() - b.rect.centerX()) <= la * 1.5f;
+        return leftOk || centerOk;
+    }
 
+    private List<Blk> mergeBlocks(List<Blk> in) {
+        List<Blk> s = new ArrayList<>(in);
+        java.util.Collections.sort(s, (x, y) -> x.rect.top != y.rect.top
+                ? Integer.compare(x.rect.top, y.rect.top)
+                : Integer.compare(x.rect.left, y.rect.left));
+        List<Blk> out = new ArrayList<>();
+        boolean[] used = new boolean[s.size()];
+        for (int i = 0; i < s.size(); i++) {
+            if (used[i]) continue;
+            Blk cur = s.get(i);
+            used[i] = true;
+            boolean grew = true;
+            while (grew) {
+                grew = false;
+                for (int j = 0; j < s.size(); j++) {
+                    if (used[j]) continue;
+                    Blk nx = s.get(j);
+                    if (canMerge(cur, nx)) {
+                        cur.rect.union(nx.rect);
+                        cur.text = cur.text + " " + nx.text;
+                        cur.lines += nx.lines;
+                        used[j] = true;
+                        grew = true;
+                    }
+                }
+            }
+            out.add(cur);
+        }
+        return out;
+    }
+
+    private void remember(List<Blk> list, String[] out) {
+        for (int i = 0; i < out.length && i < list.size(); i++) {
+            String src = list.get(i).text;
+            if (src.length() < 25 || out[i] == null) continue;
+            String pair = src + " => " + out[i];
+            if (history.contains(pair)) continue;
+            history.add(pair);
+            if (history.size() > 8) history.remove(0);
+        }
+    }
+
+    private String buildContext() {
+        if (!prefs.getBoolean("context", true) || history.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String p : history) {
+            sb.append(p.length() > 260 ? p.substring(0, 260) : p).append(" | ");
+        }
+        return sb.toString();
+    }
         private void translateSmart(List<Blk> list, String sig) {
         String[] texts = new String[list.size()];
         String[] cached = new String[list.size()];
@@ -610,6 +675,7 @@ public class CaptureService extends Service {
             return;
         }
         GeminiTranslator.glossary = prefs.getString("glossary", "").trim();
+        GeminiTranslator.context = buildContext();
         boolean bFirst = prefs.getBoolean("b_first", true);
         int[] order = bFirst ? new int[]{1, 0} : new int[]{0, 1};
         runChain(list, sig, texts, order, 0);
@@ -647,7 +713,8 @@ public class CaptureService extends Service {
             if (cache.size() > 500) cache.clear();
                 for (int i = 0; i < out.length && i < list.size(); i++) {
                     cache.put(list.get(i).text, out[i]);
-                }
+                } 
+                remember(list, out);
                 finish(list, out, sig);
                 return;
             }
@@ -734,7 +801,7 @@ public class CaptureService extends Service {
         int left = r.left;
 
         float avgLine = r.height() / (float) k.lines;
-        float size = Math.max(14f, avgLine * 0.85f);
+        float size = Math.max(10f, avgLine * 0.85f * prefs.getInt("tsize", 100) / 100f);
         float minSize = Math.max(9f, size * 0.35f);
         int availH = r.height();
 
