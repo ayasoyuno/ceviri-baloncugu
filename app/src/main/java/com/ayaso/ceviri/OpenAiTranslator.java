@@ -62,6 +62,10 @@ public class OpenAiTranslator {
                 + "Never translate character names, place names or other proper nouns; keep them exactly as written. Keep numbers and symbols as they are. "
                 + "Return ONLY a JSON array of strings with exactly " + texts.length
                 + " items, in the same order. No explanations.";
+                        if (!GeminiTranslator.context.isEmpty()) {
+            sys += " Earlier lines of this conversation, only for context and tone, do not include them in your answer: "
+                    + GeminiTranslator.context;
+                        }
                     if (!GeminiTranslator.glossary.isEmpty()) {
             sys += " Use these fixed translations whenever the term appears: "
                     + GeminiTranslator.glossary.replace("\n", "; ") + ".";
