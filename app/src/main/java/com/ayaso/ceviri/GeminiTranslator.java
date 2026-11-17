@@ -29,6 +29,7 @@ public class GeminiTranslator {
     private static final ExecutorService EX = Executors.newSingleThreadExecutor();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     public static volatile String glossary = "";
+    public static volatile String context = "";
 
     public static void translate(final String key, final String model,
                                  final String[] texts, final Callback cb) {
@@ -63,6 +64,10 @@ public class GeminiTranslator {
                 + "Never translate character names, place names or other proper nouns; keep them exactly as written. Keep numbers and symbols as they are. "
                 + "Return ONLY a JSON array of strings with exactly " + texts.length
                 + " items, in the same order. No explanations.";
+                if (!context.isEmpty()) {
+            sys += " Earlier lines of this conversation, only for context and tone, do not include them in your answer: "
+                    + context;
+                }
                 if (!glossary.isEmpty()) {
             sys += " Use these fixed translations whenever the term appears: "
                     + glossary.replace("\n", "; ") + ".";
