@@ -138,6 +138,8 @@ public class CaptureService extends Service {
     private long pauseA = 0, pauseB = 0, lastWarn = 0;
     private final HashMap<String, String> cache = new HashMap<>();
     private final ArrayList<String> history = new ArrayList<>();
+    private int seq = 0;
+    private List<Blk> activeList = null;
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
@@ -387,7 +389,7 @@ public class CaptureService extends Service {
                                 toggleAuto();
                             } else {
                                 buzz(25);
-                                if (!auto && overlay.getVisibility() == View.VISIBLE) {
+                                    if (busy || (!auto && overlay.getVisibility() == View.VISIBLE)) {
                                     clearOverlay();
                                 } else {
                                     capture();
@@ -421,6 +423,9 @@ public class CaptureService extends Service {
                 .addOnSuccessListener(v -> { modelReady = true; toast("Ceviri hazir!"); })
                 .addOnFailureListener(e -> toast("Model indirilemedi, interneti kontrol et"));
     }    private void clearOverlay() {
+        seq++;
+        activeList = null;
+        busy = false;
         overlay.setItems(new ArrayList<Item>());
         overlay.setPending(new ArrayList<RectF>());
         overlay.setVisibility(View.INVISIBLE);
@@ -472,6 +477,7 @@ public class CaptureService extends Service {
         }
 
         busy = true;
+        final int mySeq = seq;
         final boolean wasShown = overlay.getVisibility() == View.VISIBLE;
         // Kendi cevirimizi okumamak icin yakalama aninda katmani gizliyoruz
         if (wasShown) {
@@ -481,6 +487,10 @@ public class CaptureService extends Service {
         main.postDelayed(() -> bg.post(() -> {
             final Bitmap bmp = grab();
             main.post(() -> {
+                if (mySeq != seq) {
+                    if (bmp != null) bmp.recycle();
+                    return;
+                }
                 if (wasShown) {
                     overlay.setVisibility(View.VISIBLE);
                     if (swipeAttached) swipeBar.setVisibility(View.VISIBLE);
@@ -503,8 +513,13 @@ public class CaptureService extends Service {
     }
 
     private void ocr(final Bitmap bmp) {
+        final int mySeq = seq;
         recognizer.process(InputImage.fromBitmap(bmp, 0))
                 .addOnSuccessListener(res -> {
+                    if (mySeq != seq) {
+                        bmp.recycle();
+                        return;
+                    }
                     boolean smart = prefs.getBoolean("smart", true);
                     List<Blk> list = new ArrayList<>();
                     for (Text.TextBlock b : res.getTextBlocks()) {
@@ -535,7 +550,14 @@ public class CaptureService extends Service {
                     if (auto && s.equals(lastSig)) {
                         busy = false;
                         return;
-                    }                    if (prefs.getBoolean("pending", true)) {
+                    }                   
+                    activeList = list;
+                    final List<Blk> wl = list;
+                    final String ws = s;
+                    main.postDelayed(() -> {
+                        if (activeList == wl) translateAll(wl, ws);
+                    }, 9000);
+                    if (prefs.getBoolean("pending", true)) {
                         List<RectF> pend = new ArrayList<>();
                         for (Blk k : list) {
                             pend.add(new RectF(k.rect.left - 6, k.rect.top - 6,
@@ -754,6 +776,8 @@ public class CaptureService extends Service {
     }
 
         private void finish(List<Blk> list, String[] out, String sig) {
+            if (list != activeList) return;
+        activeList = null;
         List<Item> items = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
             if (out[i] != null) items.add(buildItem(list.get(i), out[i]));
