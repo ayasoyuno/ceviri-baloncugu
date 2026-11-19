@@ -125,6 +125,19 @@ public class MainActivity extends Activity {
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
         setContentView(sv);
+        if (getIntent().getBooleanExtra("autostart", false)) startCapture();
+         private void startCapture() {
+        if (!Settings.canDrawOverlays(this)) {
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
+            Toast.makeText(this, "İzni aç, sonra kutucuğa tekrar bas",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        MediaProjectionManager m =
+                (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        startActivityForResult(m.createScreenCaptureIntent(), REQ_CAPTURE);
+            }
     }    private void addColors(LinearLayout root) {
         TextView t = new TextView(this);
         t.setPadding(0, 24, 0, 8);
