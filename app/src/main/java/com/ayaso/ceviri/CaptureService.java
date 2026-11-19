@@ -1,6 +1,8 @@
 package com.ayaso.ceviri;
 
 import android.app.Notification;
+import android.app.PendingIntent;
+import android.graphics.drawable.Icon;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
@@ -139,6 +141,7 @@ public class CaptureService extends Service {
     private final HashMap<String, String> cache = new HashMap<>();
     private final ArrayList<String> history = new ArrayList<>();
     private int seq = 0;
+        static boolean running = false;
     private List<Blk> activeList = null;
 
     private final Runnable loop = new Runnable() {
@@ -153,15 +156,29 @@ public class CaptureService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        String act = intent == null ? null : intent.getAction();
+        if (act != null && projection != null) {
+            if ("ceviri.NOW".equals(act)) {
+                main.post(() -> {
+                    if (busy || (!auto && overlay.getVisibility() == View.VISIBLE)) {
+                        clearOverlay();
+                    } else {
+                        capture();
+                    }
+                });
+            } else if ("ceviri.TOGGLE".equals(act)) {
+                main.post(this::toggleAuto);
+            } else if ("ceviri.STOP".equals(act)) {
+                stopSelf();
+            }
+            return START_NOT_STICKY;
+        }
         if (projection != null || intent == null) return START_NOT_STICKY;
 
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(
                 new NotificationChannel(CH, "Ceviri", NotificationManager.IMPORTANCE_LOW));
-        Notification n = new Notification.Builder(this, CH)
-                .setContentTitle("Ceviri baloncugu acik")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .build();
+        Notification n = buildNotification();
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
         } else {
@@ -194,6 +211,8 @@ public class CaptureService extends Service {
 
         setupViews();
         setupMl();
+        running = true;
+        refreshTile();
         return START_NOT_STICKY;
     }
 
@@ -435,6 +454,7 @@ public class CaptureService extends Service {
 
     private void toggleAuto() {
         auto = !auto;
+        getSystemService(NotificationManager.class).notify(1, buildNotification());
         bubble.setBackground(circle(auto ? 0xFF00C853 : idleColor()));
         if (auto) {
             lastSig = "";
@@ -875,6 +895,8 @@ public class CaptureService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        running = false;
+        refreshTile();
         auto = false;
         if (main != null) main.removeCallbacksAndMessages(null);
         if (prefs != null && prefListener != null) {
@@ -892,5 +914,33 @@ public class CaptureService extends Service {
         if (ht != null) ht.quit();
         if (recognizer != null) recognizer.close();
         if (translator != null) translator.close();
+    }
+        private Notification buildNotification() {
+        Notification.Builder nb = new Notification.Builder(this, CH)
+                .setContentTitle("Ceviri baloncugu acik")
+                .setContentText(auto ? "Otomatik mod: ACIK" : "Otomatik mod: kapali")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setOngoing(true);
+        nb.addAction(notifAction("Cevir", "ceviri.NOW", android.R.drawable.ic_menu_camera));
+        nb.addAction(notifAction(auto ? "Otomatik: Kapat" : "Otomatik: Ac", "ceviri.TOGGLE",
+                android.R.drawable.ic_media_play));
+        nb.addAction(notifAction("Durdur", "ceviri.STOP",
+                android.R.drawable.ic_menu_close_clear_cancel));
+        return nb.build();
+    }
+
+    private Notification.Action notifAction(String title, String act, int icon) {
+        Intent i = new Intent(this, CaptureService.class).setAction(act);
+        PendingIntent pi = PendingIntent.getService(this, act.hashCode(), i,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new Notification.Action.Builder(Icon.createWithResource(this, icon), title, pi)
+                .build();
+    }
+
+    private void refreshTile() {
+        try {
+            android.service.quicksettings.TileService.requestListeningState(this,
+                    new android.content.ComponentName(this, TranslateTileService.class));
+        } catch (Exception ignored) {}
     }
 }
