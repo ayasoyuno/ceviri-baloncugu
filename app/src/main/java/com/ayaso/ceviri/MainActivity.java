@@ -3,6 +3,7 @@ package com.ayaso.ceviri;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.drawable.GradientDrawable;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
@@ -11,6 +12,7 @@ import android.provider.Settings;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -19,8 +21,6 @@ import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.graphics.drawable.GradientDrawable;
-import android.view.View;
 
 import java.util.Locale;
 
@@ -42,7 +42,7 @@ public class MainActivity extends Activity {
 
         TextView info = new TextView(this);
         info.setTextSize(15);
-        info.setText("1) Başlat'a bas, izinleri ver.\n"
+        info.setText("1) Başlat'a bas, izinleri ver. Ya da hızlı ayarlardaki \"Çeviri Baloncuğu\" kutucuğuna dokun.\n"
                 + "2) Ekran paylaşımı sorulunca \"Tüm ekran\" seç.\n"
                 + "3) Oyuna geç. Baloncuğa dokununca ekran yerinde çevrilir.\n"
                 + "4) Kapatmak için baloncuğa tekrar dokun ya da alttaki beyaz çubuğu yukarı kaydır.\n"
@@ -51,18 +51,7 @@ public class MainActivity extends Activity {
 
         Button start = new Button(this);
         start.setText("Başlat");
-        start.setOnClickListener(v -> {
-            if (!Settings.canDrawOverlays(this)) {
-                startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName())));
-                Toast.makeText(this, "İzni aç, sonra geri dönüp tekrar Başlat'a bas",
-                        Toast.LENGTH_LONG).show();
-                return;
-            }
-            MediaProjectionManager m =
-                    (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
-            startActivityForResult(m.createScreenCaptureIntent(), REQ_CAPTURE);
-        });
+        start.setOnClickListener(v -> startCapture());
         root.addView(start);
 
         Button stop = new Button(this);
@@ -78,7 +67,7 @@ public class MainActivity extends Activity {
 
         addSeek(root, "Baloncuk boyutu", "size", 30, 100, 52, 1, " dp");
         addSeek(root, "Baloncuk görünürlüğü", "alpha", 20, 100, 80, 1, " %");
-                addColors(root);
+        addColors(root);
         addSeek(root, "Otomatik mod aralığı", "speed", 10, 30, 10, 10, " sn");
         addSeek(root, "Kaplama payı (orijinal yazı sızarsa artır)", "pad", 2, 20, 4, 1, " dp");
         addSeek(root, "Çeviri yazı boyutu", "tsize", 50, 130, 100, 1, " %");
@@ -115,7 +104,7 @@ public class MainActivity extends Activity {
 
         TextView g2 = new TextView(this);
         g2.setPadding(0, 32, 0, 0);
-        g2.setText("2. sağlayıcı: Groq (console.groq.com) ya da OpenAI uyumlu servis");
+        g2.setText("2. sağlayıcı: Groq / OpenRouter ya da OpenAI uyumlu servis");
         root.addView(g2);
         addField(root, "Adres", "b_url", "https://api.groq.com/openai/v1", false);
         addField(root, "API anahtarı", "b_key", "", true);
@@ -125,20 +114,24 @@ public class MainActivity extends Activity {
         ScrollView sv = new ScrollView(this);
         sv.addView(root);
         setContentView(sv);
+
         if (getIntent().getBooleanExtra("autostart", false)) startCapture();
-         private void startCapture() {
+    }
+
+    private void startCapture() {
         if (!Settings.canDrawOverlays(this)) {
             startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName())));
-            Toast.makeText(this, "İzni aç, sonra kutucuğa tekrar bas",
+            Toast.makeText(this, "İzni aç, sonra geri dönüp tekrar Başlat'a bas",
                     Toast.LENGTH_LONG).show();
             return;
         }
         MediaProjectionManager m =
                 (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
         startActivityForResult(m.createScreenCaptureIntent(), REQ_CAPTURE);
-            }
-    }    private void addColors(LinearLayout root) {
+    }
+
+    private void addColors(LinearLayout root) {
         TextView t = new TextView(this);
         t.setPadding(0, 24, 0, 8);
         t.setText("Baloncuk rengi");
@@ -165,6 +158,7 @@ public class MainActivity extends Activity {
         }
         root.addView(row);
     }
+
     private void addGlossary(LinearLayout root) {
         TextView t = new TextView(this);
         t.setPadding(0, 32, 0, 0);
@@ -184,6 +178,7 @@ public class MainActivity extends Activity {
         });
         root.addView(et);
     }
+
     private void addSwitch(LinearLayout root, String text, String key, boolean def) {
         Switch s = new Switch(this);
         s.setText(text);
