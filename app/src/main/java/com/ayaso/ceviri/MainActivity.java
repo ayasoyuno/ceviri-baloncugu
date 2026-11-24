@@ -92,7 +92,7 @@ public class MainActivity extends Activity {
         root.addView(aiInfo);
 
         addSwitch(root, "Yapay zeka çevirisini kullan", "ai", true);
-        addSwitch(root, "Önce 2. sağlayıcıyı (Groq) dene", "b_first", true);
+        addSwitch(root, "Önce 2. sağlayıcıyı (Groq) dene", "b_first", false);
         addSwitch(root, "Önceki satırları bağlam olarak kullan", "context", true);
 
         TextView g1 = new TextView(this);
