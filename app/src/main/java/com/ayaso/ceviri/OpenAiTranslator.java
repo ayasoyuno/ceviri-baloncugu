@@ -91,7 +91,7 @@ public class OpenAiTranslator {
         try {
             c.setRequestMethod("POST");
             c.setConnectTimeout(4000);
-            c.setReadTimeout(8000);
+            c.setReadTimeout(5000);
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
             c.setRequestProperty("Authorization", "Bearer " + key);
