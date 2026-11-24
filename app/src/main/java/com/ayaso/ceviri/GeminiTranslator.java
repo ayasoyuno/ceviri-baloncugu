@@ -91,7 +91,7 @@ public class GeminiTranslator {
         try {
             c.setRequestMethod("POST");
             c.setConnectTimeout(4000);
-            c.setReadTimeout(12000);
+            c.setReadTimeout(6000);
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
             c.setRequestProperty("x-goog-api-key", key);
