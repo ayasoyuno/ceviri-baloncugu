@@ -718,7 +718,7 @@ public class CaptureService extends Service {
         }
         GeminiTranslator.glossary = prefs.getString("glossary", "").trim();
         GeminiTranslator.context = buildContext();
-        boolean bFirst = prefs.getBoolean("b_first", true);
+        boolean bFirst = prefs.getBoolean("b_first", false);
         int[] order = bFirst ? new int[]{1, 0} : new int[]{0, 1};
         runChain(list, sig, texts, order, 0);
         }
