@@ -60,7 +60,7 @@ public class GeminiTranslator {
                 + "Translate each English string into natural, fluent Turkish, "
                 + "the way a native Turkish gamer would read it in a game. "
                 + "The strings are from one screen, so use them as context for each other. "
-                + "Translate by meaning, not word by word: use natural spoken Turkish and the Turkish equivalent of greetings, idioms and set phrases. "
+                + "Be faithful to the source: keep every detail and the exact meaning, never add, omit or soften anything. But phrase it in natural spoken Turkish, using the Turkish equivalent of greetings, idioms and set phrases instead of word-for-word translation. "
                 + "Think about who is talking to whom and what just happened; for example, when old friends meet again, 'How have you been?' should become 'Görüşmeyeli nasılsın?'. "
                 + "The text comes from OCR and may contain small recognition errors; fix them silently. "
                 + "Never translate character names, place names or other proper nouns; keep them exactly as written. Keep numbers and symbols as they are. "
