@@ -780,6 +780,7 @@ public class CaptureService extends Service {
     // Cevrimdisi yedek ceviri
     private void translateAll(final List<Blk> list, final String sig) {
         final int n = list.size();
+        toast("Cevrimdisi ceviri: yapay zeka cevap vermedi");
         final String[] out = new String[n];
         final int[] left = {n};
         for (int i = 0; i < n; i++) {
