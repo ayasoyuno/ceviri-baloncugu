@@ -576,7 +576,7 @@ public class CaptureService extends Service {
                     final String ws = s;
                     main.postDelayed(() -> {
                         if (activeList == wl) translateAll(wl, ws);
-                    }, 9000);
+                    }, 20000);
                     if (prefs.getBoolean("pending", true)) {
                         List<RectF> pend = new ArrayList<>();
                         for (Blk k : list) {
