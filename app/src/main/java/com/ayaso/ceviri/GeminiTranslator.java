@@ -26,7 +26,7 @@ public class GeminiTranslator {
         HttpErr(int code) { super("HTTP " + code); this.code = code; }
     }
 
-    private static final ExecutorService EX = Executors.newSingleThreadExecutor();
+    private static final ExecutorService EX = Executors.newCachedThreadPool();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     public static volatile String glossary = "";
     public static volatile String context = "";

@@ -575,8 +575,8 @@ public class CaptureService extends Service {
                     final List<Blk> wl = list;
                     final String ws = s;
                     main.postDelayed(() -> {
-                        if (activeList == wl) translateAll(wl, ws);
-                    }, 20000);
+                        if (activeList == wl) onAiGaveUp(wl, ws);
+                    }, 14000);
                     if (prefs.getBoolean("pending", true)) {
                         List<RectF> pend = new ArrayList<>();
                         for (Blk k : list) {
@@ -703,59 +703,101 @@ public class CaptureService extends Service {
         }
         return sb.toString();
     }
-        private void translateSmart(List<Blk> list, String sig) {
-        String[] texts = new String[list.size()];
-        String[] cached = new String[list.size()];
+    private void translateSmart(final List<Blk> list, final String sig) {
+        final String[] texts = new String[list.size()];
+        final String[] cached = new String[list.size()];
         boolean all = true;
         for (int i = 0; i < texts.length; i++) {
             texts[i] = list.get(i).text;
             cached[i] = cache.get(texts[i]);
             if (cached[i] == null) all = false;
         }
-        if (all && prefs.getBoolean("ai", true)) {
+        if (!prefs.getBoolean("ai", true)) {
+            translateAll(list, sig);
+            return;
+        }
+        if (all) {
             finish(list, cached, sig);
             return;
         }
         GeminiTranslator.glossary = prefs.getString("glossary", "").trim();
         GeminiTranslator.context = buildContext();
-        boolean bFirst = prefs.getBoolean("b_first", false);
-        int[] order = bFirst ? new int[]{1, 0} : new int[]{0, 1};
-        runChain(list, sig, texts, order, 0);
-        }
 
-    private void runChain(final List<Blk> list, final String sig, final String[] texts,
-                          final int[] order, final int idx) {
-        if (!prefs.getBoolean("ai", true) || idx >= order.length) {
-            translateAll(list, sig);
+        Race r = new Race(list, sig, texts);
+        long now = System.currentTimeMillis();
+        boolean okA = !r.keyA.isEmpty() && now >= pauseA;
+        boolean okB = !r.keyB.isEmpty() && now >= pauseB;
+        if (!okA && !okB) {
+            onAiGaveUp(list, sig);
             return;
         }
-        final int p = order[idx];
-        String key;
-        String model;
-        String base = "";
-        if (p == 0) {
-            key = prefs.getString("apikey", "").trim();
-            model = prefs.getString("model", "gemini-3.5-flash-lite").trim();
-            if (model.isEmpty()) model = "gemini-3.5-flash-lite";
+        // Once Gemini baslar. Yedek saglayici sadece Gemini 2.5 sn icinde
+        // cevap vermezse (ya da hata verirse) devreye girer.
+        if (okA) {
+            r.second = okB ? 1 : -1;
+            r.start(0);
+            if (r.second >= 0) {
+                r.hedge = () -> {
+                    if (!r.done && r.second >= 0) r.start(r.second);
+                };
+                main.postDelayed(r.hedge, 2500);
+            }
         } else {
-            key = prefs.getString("b_key", "").trim();
-            model = prefs.getString("b_model", "openai/gpt-oss-120b").trim();
-            if (model.isEmpty()) model = "openai/gpt-oss-120b";
-            base = prefs.getString("b_url", "https://api.groq.com/openai/v1").trim();
-            if (base.isEmpty()) base = "https://api.groq.com/openai/v1";
+            r.start(1);
         }
-        long paused = (p == 0) ? pauseA : pauseB;
-        if (key.isEmpty() || System.currentTimeMillis() < paused) {
-            runChain(list, sig, texts, order, idx + 1);
-            return;
+    }
+
+    private class Race {
+        final List<Blk> list;
+        final String sig;
+        final String[] texts;
+        final String keyA, modelA, keyB, modelB, baseB;
+        boolean done = false;
+        final boolean[] started = new boolean[2];
+        int pending = 0;
+        int second = -1;
+        Runnable hedge = null;
+
+        Race(List<Blk> list, String sig, String[] texts) {
+            this.list = list;
+            this.sig = sig;
+            this.texts = texts;
+            keyA = prefs.getString("apikey", "").trim();
+            String ma = prefs.getString("model", "gemini-3.5-flash-lite").trim();
+            modelA = ma.isEmpty() ? "gemini-3.5-flash-lite" : ma;
+            keyB = prefs.getString("b_key", "").trim();
+            String mb = prefs.getString("b_model", "openai/gpt-oss-120b").trim();
+            modelB = mb.isEmpty() ? "openai/gpt-oss-120b" : mb;
+            String bu = prefs.getString("b_url", "https://api.groq.com/openai/v1").trim();
+            baseB = bu.isEmpty() ? "https://api.groq.com/openai/v1" : bu;
         }
 
-        GeminiTranslator.Callback cb = (out, err, limited) -> {
+        void start(final int p) {
+            if (started[p]) return;
+            started[p] = true;
+            pending++;
+            GeminiTranslator.Callback cb = (out, err, limited) -> onDone(p, out, err, limited);
+            if (p == 0) {
+                GeminiTranslator.translate(keyA, modelA, texts, cb);
+            } else {
+                OpenAiTranslator.translate(baseB, keyB, modelB, texts, cb);
+            }
+        }
+
+        void stopHedge() {
+            if (hedge != null) main.removeCallbacks(hedge);
+        }
+
+        void onDone(int p, String[] out, String err, boolean limited) {
+            pending--;
             if (out != null) {
-            if (cache.size() > 500) cache.clear();
+                if (done) return;
+                done = true;
+                stopHedge();
+                if (cache.size() > 500) cache.clear();
                 for (int i = 0; i < out.length && i < list.size(); i++) {
                     cache.put(list.get(i).text, out[i]);
-                } 
+                }
                 remember(list, out);
                 finish(list, out, sig);
                 return;
@@ -768,19 +810,45 @@ public class CaptureService extends Service {
                 lastWarn = t;
                 toast((p == 0 ? "Gemini" : "2. yapay zeka") + " calismadi (" + err + ")");
             }
-            runChain(list, sig, texts, order, idx + 1);
-        };
-        if (p == 0) {
-            GeminiTranslator.translate(key, model, texts, cb);
-        } else {
-            OpenAiTranslator.translate(base, key, model, texts, cb);
+            if (done) return;
+            if (second >= 0 && !started[second]) {
+                stopHedge();
+                start(second);
+                return;
+            }
+            if (pending == 0) {
+                done = true;
+                stopHedge();
+                onAiGaveUp(list, sig);
+            }
         }
+    }
+
+    // Yapay zeka cevap veremedi: cevrimdisi yedek aciksa onu kullan, degilse uyar
+    private void onAiGaveUp(List<Blk> list, String sig) {
+        if (list != activeList) return;
+        if (!prefs.getBoolean("ai", true)) {
+            translateAll(list, sig);
+        } else if (prefs.getBoolean("offline", true)) {
+            toast("Yapay zeka cevap vermedi, cevrimdisi ceviri kullaniliyor");
+            translateAll(list, sig);
+        } else {
+            failTranslate(list);
+        }
+    }
+
+    private void failTranslate(List<Blk> list) {
+        if (list != activeList) return;
+        activeList = null;
+        overlay.setPending(new ArrayList<RectF>());
+        toast("Ceviri yapilamadi, tekrar dene");
+        if (!overlay.hasItems()) overlay.setVisibility(View.INVISIBLE);
+        busy = false;
     }
 
     // Cevrimdisi yedek ceviri
     private void translateAll(final List<Blk> list, final String sig) {
         final int n = list.size();
-        toast("Cevrimdisi ceviri: yapay zeka cevap vermedi");
         final String[] out = new String[n];
         final int[] left = {n};
         for (int i = 0; i < n; i++) {

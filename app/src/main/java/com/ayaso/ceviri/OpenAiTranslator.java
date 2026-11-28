@@ -25,7 +25,7 @@ public class OpenAiTranslator {
         }
     }
 
-    private static final ExecutorService EX = Executors.newSingleThreadExecutor();
+    private static final ExecutorService EX = Executors.newCachedThreadPool();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     public static void translate(final String baseUrl, final String key, final String model,

@@ -87,12 +87,12 @@ public class MainActivity extends Activity {
 
         TextView aiInfo = new TextView(this);
         aiInfo.setTextSize(14);
-        aiInfo.setText("Anahtarlar ücretsiz alınır. Biri hata verirse diğeri, o da olmazsa "
-                + "çevrimdışı çeviri kullanılır.");
+        aiInfo.setText("Anahtarlar ücretsiz alınır. Önce Gemini denenir; 2,5 sn içinde cevap vermezse "
+                + "2. sağlayıcı da devreye girer. İkisi de olmazsa çevrimdışı çeviri (açıksa) kullanılır.");
         root.addView(aiInfo);
 
         addSwitch(root, "Yapay zeka çevirisini kullan", "ai", true);
-        addSwitch(root, "Önce 2. sağlayıcıyı (Groq) dene", "b_first", false);
+        addSwitch(root, "Çevrimdışı yedek çeviri (yapay zeka cevap vermezse; kapalıysa \"çevrilemedi\" der)", "offline", true);
         addSwitch(root, "Önceki satırları bağlam olarak kullan", "context", true);
 
         TextView g1 = new TextView(this);
